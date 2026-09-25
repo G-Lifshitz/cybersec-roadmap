@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Roadmap{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Your Roadmap</h1>
+  <span class="stat">{{ total_hours }}h logged</span>
+</div>
+
+{% if weak_skills %}
+<div class="alert">
+  Struggling with: <strong>{{ weak_skills | join(", ") }}</strong> —
+  <a href="{{ url_for('recommendations') }}">see recommendations →</a>
+</div>
+{% endif %}
+
+{% if skill_summary %}
+<section class="skill-summary">
+  {% for tag, counts in skill_summary.items() %}
+  <div class="skill-chip">
+    <span class="skill-name">{{ tag }}</span>
+    <span class="skill-counts">
+      {{ counts.completed }}✓
+      {% if counts.in_progress %} · {{ counts.in_progress }} active{% endif %}
+    </span>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="filter-row">
+  {% for s in statuses %}
+  <a href="?status={{ s }}" class="fpill {% if request.args.get('status') == s %}active{% endif %}">
+    {{ s | replace('_', ' ') }}
+  </a>
+  {% endfor %}
+  {% if request.args.get('status') %}
+  <a href="{{ url_for('index') }}" class="fpill">clear</a>
+  {% endif %}
+</div>
+
+{% if items %}
+<div class="item-list">
+  {% for item in items %}
+  <a href="{{ url_for('item_detail', item_id=item.id) }}" class="item-card status-{{ item.status }} diff-{{ item.difficulty }}">
+    <div class="item-left">
+      <div class="item-title">{{ item.title }}</div>
+      <div class="item-meta">
+        {{ item.type }} · {{ item.platform or '—' }}
+        {% if item.skill_tags %}
+          · <span class="tags">{{ item.skill_tags }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="item-right">
+      <div class="completion-bar">
+        <div class="completion-fill" style="width: {{ item.completion }}%"></div>
+      </div>
+      <span class="completion-pct">{{ item.completion }}%</span>
+      <span class="status-badge">{{ item.status | replace('_', ' ') }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  Nothing here yet. <a href="{{ url_for('add_item') }}">Add your first item →</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Recommendations{% endblock %}
+
+{% block content %}
+<h1>Recommendations</h1>
+
+{% if weak_skills %}
+<div class="alert">
+  Based on your logs, you find <strong>{{ weak_skills | join(", ") }}</strong> difficult.
+  Videos below are targeted at those areas.
+</div>
+{% else %}
+<p class="muted">Log more progress with difficulty ratings to get personalised video suggestions.</p>
+{% endif %}
+
+{% if videos %}
+<section class="card">
+  <h2>Suggested Videos</h2>
+  {% for tag, vids in videos.items() %}
+  {% if vids %}
+  <h3 class="tag-heading">{{ tag }}</h3>
+  <div class="video-grid">
+    {% for v in vids %}
+    <a href="{{ v.url }}" target="_blank" class="video-card {% if v.trusted %}trusted{% endif %}">
+      {% if v.thumbnail %}
+      <img src="{{ v.thumbnail }}" alt="{{ v.title }}">
+      {% endif %}
+      <div class="video-info">
+        <div class="video-title">{{ v.title }}</div>
+        <div class="video-channel">{{ v.channel }}{% if v.trusted %} ✓{% endif %}</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Subscriptions Worth Considering</h2>
+  <div class="sub-list">
+    {% for sub in subscriptions %}
+    <div class="sub-card">
+      <div class="sub-header">
+        <a href="{{ sub.url }}" target="_blank" class="sub-name">{{ sub.name }} ↗</a>
+        <span class="sub-price">{{ sub.price }}</span>
+      </div>
+      <p class="sub-why">{{ sub.why }}</p>
+      <div class="sub-tags">
+        {% for level in sub.best_for %}
+        <span class="badge diff-{{ level }}">{{ level }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
