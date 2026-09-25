@@ -102,3 +102,39 @@ def get_subscriptions(difficulty_level=None):
     if not difficulty_level:
         return SUBSCRIPTIONS
     return [s for s in SUBSCRIPTIONS if difficulty_level in s["best_for"]]
+
+
+class RecommendationService:
+    """
+    Facade over the YouTube video search and subscription subsystems.
+
+    Pattern: Facade (Structural)
+    Provides a single, simplified interface that routes callers use instead of
+    calling search_videos(), recommend_for_skills(), and get_subscriptions()
+    directly.  Implementation details (API key handling, trusted-channel
+    sorting, quota cap) are hidden inside the methods below.
+    """
+
+    def for_weak_skills(self, weak_tags):
+        """Return (videos_dict, subscriptions_list) for the recommendations page.
+
+        Args:
+            weak_tags: list of skill tags flagged as weak by weak_skills()
+        Returns:
+            (dict[tag -> list[video]], list[subscription])
+        """
+        videos = recommend_for_skills(weak_tags) if weak_tags else {}
+        subs = get_subscriptions()
+        return videos, subs
+
+    def for_item(self, skill_tags, max_tags=2):
+        """Return video recommendations for a single roadmap item.
+
+        Args:
+            skill_tags: list of strings already split from the item's skill_tags field
+            max_tags:   how many tags to search (default 2, keeps quota low)
+        Returns:
+            dict[tag -> list[video]]
+        """
+        tags = [t.strip() for t in skill_tags if t.strip()][:max_tags]
+        return recommend_for_skills(tags) if tags else {}

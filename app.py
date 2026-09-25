@@ -7,7 +7,7 @@ load_dotenv()
 from db import init_db
 import models.roadmap as roadmap_model
 import models.progress as progress_model
-from services.youtube import recommend_for_skills, get_subscriptions
+from services.youtube import RecommendationService
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod")
@@ -19,6 +19,9 @@ PLATFORMS = ["HTB", "THM", "YouTube", "Coursera", "OffSec", "TCM", "Other"]
 DIFFICULTIES = ["beginner", "intermediate", "advanced"]
 STATUSES = ["not_started", "in_progress", "completed"]
 FELT_DIFFICULTIES = ["easy", "fair", "hard", "brutal"]
+
+# Single Facade instance — all routes call through it
+_rec = RecommendationService()
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────
@@ -88,9 +91,9 @@ def item_detail(item_id):
     logs = progress_model.get_logs_for_item(item_id)
     completion = progress_model.latest_completion(item_id)
 
-    # YouTube recommendations based on this item's skill tags
+    # YouTube recommendations via the RecommendationService facade
     tags = [t.strip() for t in (item["skill_tags"] or "").split(",") if t.strip()]
-    videos = recommend_for_skills(tags[:2]) if tags else {}
+    videos = _rec.for_item(tags)
 
     return render_template(
         "item.html",
@@ -133,8 +136,7 @@ def delete_item(item_id):
 @app.route("/recommendations")
 def recommendations():
     weak = progress_model.weak_skills()
-    videos = recommend_for_skills(weak) if weak else {}
-    subs = get_subscriptions()
+    videos, subs = _rec.for_weak_skills(weak)
     return render_template(
         "recommendations.html",
         weak_skills=weak,
