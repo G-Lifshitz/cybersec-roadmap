@@ -2,56 +2,51 @@
 {% block title %}Recommendations{% endblock %}
 
 {% block content %}
-<h1>Recommendations</h1>
+<div class="page-head">
+  <div>
+    <h1>Recommendations</h1>
+    <p class="muted">Built from the topics your logs say you're struggling with.</p>
+  </div>
+</div>
 
 {% if weak_skills %}
-<div class="alert">
-  Based on your logs, you find <strong>{{ weak_skills | join(", ") }}</strong> difficult.
-  Videos below are targeted at those areas.
+<div class="callout">
+  <span class="callout-icon">!</span>
+  <div>More than half your sessions on <strong>{{ weak_skills | join(", ") }}</strong> were rated hard or brutal.</div>
 </div>
 {% else %}
-<p class="muted">Log more progress with difficulty ratings to get personalised video suggestions.</p>
+<div class="empty empty-sm">Log a few sessions with a difficulty rating and this page will start targeting your weak spots.</div>
 {% endif %}
 
-{% if videos %}
+{% if videos and videos.values() | select | list %}
 <section class="card">
-  <h2>Suggested Videos</h2>
-  {% for tag, vids in videos.items() %}
-  {% if vids %}
-  <h3 class="tag-heading">{{ tag }}</h3>
+  <h2>Videos to watch</h2>
+  {% for tag, vids in videos.items() if vids %}
+  <h3 class="section-label">#{{ tag }}</h3>
   <div class="video-grid">
     {% for v in vids %}
-    <a href="{{ v.url }}" target="_blank" class="video-card {% if v.trusted %}trusted{% endif %}">
-      {% if v.thumbnail %}
-      <img src="{{ v.thumbnail }}" alt="{{ v.title }}">
-      {% endif %}
-      <div class="video-info">
-        <div class="video-title">{{ v.title }}</div>
-        <div class="video-channel">{{ v.channel }}{% if v.trusted %} ✓{% endif %}</div>
-      </div>
+    <a href="{{ v.url }}" target="_blank" rel="noopener" class="video {% if v.trusted %}trusted{% endif %}">
+      {% if v.thumbnail %}<img src="{{ v.thumbnail }}" alt="">{% endif %}
+      <div class="video-title">{{ v.title }}</div>
+      <div class="video-channel">{{ v.channel }}{% if v.trusted %} <span class="check">&check;</span>{% endif %}</div>
     </a>
     {% endfor %}
   </div>
-  {% endif %}
   {% endfor %}
 </section>
 {% endif %}
 
 <section class="card">
-  <h2>Subscriptions Worth Considering</h2>
-  <div class="sub-list">
+  <h2>Platforms worth paying for</h2>
+  <div class="sub-grid">
     {% for sub in subscriptions %}
-    <div class="sub-card">
-      <div class="sub-header">
-        <a href="{{ sub.url }}" target="_blank" class="sub-name">{{ sub.name }} ↗</a>
+    <div class="sub">
+      <div class="sub-top">
+        <a href="{{ sub.url }}" target="_blank" rel="noopener" class="sub-name">{{ sub.name }} &nearr;</a>
         <span class="sub-price">{{ sub.price }}</span>
       </div>
       <p class="sub-why">{{ sub.why }}</p>
-      <div class="sub-tags">
-        {% for level in sub.best_for %}
-        <span class="badge diff-{{ level }}">{{ level }}</span>
-        {% endfor %}
-      </div>
+      <div>{% for level in sub.best_for %}<span class="pill d-{{ level }}">{{ level }}</span> {% endfor %}</div>
     </div>
     {% endfor %}
   </div>

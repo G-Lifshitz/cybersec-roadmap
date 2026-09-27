@@ -2,69 +2,84 @@
 {% block title %}Roadmap{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Your Roadmap</h1>
-  <span class="stat">{{ total_hours }}h logged</span>
+<div class="page-head">
+  <div>
+    <h1>Your roadmap</h1>
+    <p class="muted">Everything you're planning to learn, and how far along you are.</p>
+  </div>
 </div>
 
+<section class="stats">
+  <div class="stat"><span class="stat-value">{{ counts.total }}</span><span class="stat-label">items</span></div>
+  <div class="stat"><span class="stat-value accent-blue">{{ counts.in_progress }}</span><span class="stat-label">in progress</span></div>
+  <div class="stat"><span class="stat-value accent-green">{{ counts.completed }}</span><span class="stat-label">completed</span></div>
+  <div class="stat"><span class="stat-value">{{ total_hours }}<small>h</small></span><span class="stat-label">logged</span></div>
+</section>
+
 {% if weak_skills %}
-<div class="alert">
-  Struggling with: <strong>{{ weak_skills | join(", ") }}</strong> —
-  <a href="{{ url_for('recommendations') }}">see recommendations →</a>
+<div class="callout">
+  <span class="callout-icon">!</span>
+  <div>You're finding <strong>{{ weak_skills | join(", ") }}</strong> hard.
+    <a href="{{ url_for('recommendations') }}">See what to watch &rarr;</a></div>
 </div>
 {% endif %}
 
 {% if skill_summary %}
-<section class="skill-summary">
-  {% for tag, counts in skill_summary.items() %}
-  <div class="skill-chip">
-    <span class="skill-name">{{ tag }}</span>
-    <span class="skill-counts">
-      {{ counts.completed }}✓
-      {% if counts.in_progress %} · {{ counts.in_progress }} active{% endif %}
-    </span>
-  </div>
+<section class="tag-cloud">
+  {% for tag, c in skill_summary.items() %}
+  <a href="?skill={{ tag }}" class="tag {% if filters.skill == tag %}active{% endif %}">
+    {{ tag }} <span class="tag-count">{{ c.completed }}/{{ c.completed + c.in_progress + c.not_started }}</span>
+  </a>
   {% endfor %}
 </section>
 {% endif %}
 
-<div class="filter-row">
-  {% for s in statuses %}
-  <a href="?status={{ s }}" class="fpill {% if request.args.get('status') == s %}active{% endif %}">
-    {{ s | replace('_', ' ') }}
-  </a>
-  {% endfor %}
-  {% if request.args.get('status') %}
-  <a href="{{ url_for('index') }}" class="fpill">clear</a>
-  {% endif %}
-</div>
+<form method="GET" action="{{ url_for('index') }}" class="filter-bar">
+  <input type="search" name="q" value="{{ filters.search or '' }}" placeholder="Search title or platform" class="filter-search">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">Any status</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s | replace('_', ' ') }}</option>{% endfor %}
+  </select>
+  <select name="type" onchange="this.form.submit()">
+    <option value="">Any type</option>
+    {% for t in item_types %}<option value="{{ t }}" {% if filters.type_ == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  <select name="skill" onchange="this.form.submit()">
+    <option value="">Any tag</option>
+    {% for t in all_tags %}<option value="{{ t }}" {% if filters.skill == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn btn-ghost btn-sm">Filter</button>
+  {% if filtering %}<a href="{{ url_for('index') }}" class="clear-link">Clear</a>{% endif %}
+</form>
 
 {% if items %}
 <div class="item-list">
   {% for item in items %}
-  <a href="{{ url_for('item_detail', item_id=item.id) }}" class="item-card status-{{ item.status }} diff-{{ item.difficulty }}">
-    <div class="item-left">
+  <a href="{{ url_for('item_detail', item_id=item.id) }}" class="item-row s-{{ item.status }}">
+    <div class="item-main">
       <div class="item-title">{{ item.title }}</div>
-      <div class="item-meta">
-        {{ item.type }} · {{ item.platform or '—' }}
-        {% if item.skill_tags %}
-          · <span class="tags">{{ item.skill_tags }}</span>
-        {% endif %}
+      <div class="item-sub">
+        <span class="pill pill-type">{{ item.type }}</span>
+        {% if item.platform %}<span class="item-platform">{{ item.platform }}</span>{% endif %}
+        <span class="pill d-{{ item.difficulty }}">{{ item.difficulty }}</span>
+        {% for t in (item.skill_tags or '').split(',') if t.strip() %}<span class="mini-tag">#{{ t.strip() }}</span>{% endfor %}
       </div>
     </div>
-    <div class="item-right">
-      <div class="completion-bar">
-        <div class="completion-fill" style="width: {{ item.completion }}%"></div>
-      </div>
-      <span class="completion-pct">{{ item.completion }}%</span>
-      <span class="status-badge">{{ item.status | replace('_', ' ') }}</span>
+    <div class="item-side">
+      <div class="prio" title="Priority {{ item.priority }}">{% for n in range(5) %}<i class="{% if n < item.priority %}on{% endif %}"></i>{% endfor %}</div>
+      <div class="bar"><div class="bar-fill" style="width: {{ item.completion }}%"></div></div>
+      <span class="pct">{{ item.completion }}%</span>
     </div>
   </a>
   {% endfor %}
 </div>
+{% elif filtering %}
+<div class="empty">No items match these filters. <a href="{{ url_for('index') }}">Clear filters</a></div>
 {% else %}
-<div class="empty-state">
-  Nothing here yet. <a href="{{ url_for('add_item') }}">Add your first item →</a>
+<div class="empty">
+  <p class="empty-title">Your roadmap is empty</p>
+  <p class="muted">Add the first course, cert or lab you want to work on.</p>
+  <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ Add your first item</a>
 </div>
 {% endif %}
 {% endblock %}

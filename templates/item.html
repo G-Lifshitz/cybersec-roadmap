@@ -2,114 +2,106 @@
 {% block title %}{{ item.title }}{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<a href="{{ url_for('index') }}" class="back">&larr; Roadmap</a>
+
+<div class="page-head">
   <div>
     <h1>{{ item.title }}</h1>
-    <div class="item-meta">
-      <span class="badge type">{{ item.type }}</span>
-      <span class="badge platform">{{ item.platform or '—' }}</span>
-      <span class="badge diff-{{ item.difficulty }}">{{ item.difficulty }}</span>
-      <span class="badge status-{{ item.status }}">{{ item.status | replace('_', ' ') }}</span>
+    <div class="item-sub">
+      <span class="pill pill-type">{{ item.type }}</span>
+      {% if item.platform %}<span class="item-platform">{{ item.platform }}</span>{% endif %}
+      <span class="pill d-{{ item.difficulty }}">{{ item.difficulty }}</span>
+      <span class="pill s-pill-{{ item.status }}">{{ item.status | replace('_', ' ') }}</span>
+      {% for t in (item.skill_tags or '').split(',') if t.strip() %}<span class="mini-tag">#{{ t.strip() }}</span>{% endfor %}
     </div>
   </div>
-  {% if item.url %}
-  <a href="{{ item.url }}" target="_blank" class="btn-outline">Open resource ↗</a>
-  {% endif %}
+  <div class="head-actions">
+    {% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener" class="btn btn-ghost">Open resource &nearr;</a>{% endif %}
+    <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-ghost">Edit</a>
+  </div>
 </div>
 
-{% if item.skill_tags %}
-<div class="tag-row">
-  {% for tag in item.skill_tags.split(',') %}
-  <span class="skill-chip-sm">{{ tag.strip() }}</span>
-  {% endfor %}
+<div class="progress-block">
+  <div class="bar bar-lg"><div class="bar-fill" style="width: {{ completion }}%"></div></div>
+  <span class="pct-lg">{{ completion }}%</span>
 </div>
-{% endif %}
 
-<div class="progress-bar-lg">
-  <div class="progress-fill-lg" style="width: {{ completion }}%"></div>
-</div>
-<p class="progress-label">{{ completion }}% complete</p>
-
-<!-- Log progress form -->
-<section class="card">
-  <h2>Log Progress</h2>
-  <form method="POST" action="{{ url_for('log_progress', item_id=item.id) }}">
-    <div class="form-row">
-      <label>Completion %
-        <input type="number" name="completion_pct" value="{{ completion }}" min="0" max="100">
-      </label>
-      <label>Time spent (mins)
-        <input type="number" name="time_spent_mins" min="0" placeholder="60">
-      </label>
-      <label>How did it feel?
-        <select name="felt_difficulty">
-          <option value="">— pick one —</option>
-          {% for fd in felt_difficulties %}
-          <option value="{{ fd }}">{{ fd }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </div>
-    <label>Notes
-      <textarea name="notes" rows="3" placeholder="What did you cover? Any blockers?"></textarea>
-    </label>
-    <button type="submit" class="btn">Save log</button>
-  </form>
-</section>
-
-<!-- Progress history -->
-{% if logs %}
-<section class="card">
-  <h2>History</h2>
-  <div class="log-list">
-    {% for log in logs %}
-    <div class="log-entry">
-      <div class="log-meta">
-        <span class="log-date">{{ log.checked_in_at[:10] }}</span>
-        <span class="log-pct">{{ log.completion_pct }}%</span>
-        {% if log.felt_difficulty %}
-        <span class="badge felt-{{ log.felt_difficulty }}">{{ log.felt_difficulty }}</span>
-        {% endif %}
-        {% if log.time_spent_mins %}
-        <span class="log-time">{{ log.time_spent_mins }}m</span>
-        {% endif %}
+<div class="detail-grid">
+  <section class="card">
+    <h2>Log a session</h2>
+    <form method="POST" action="{{ url_for('log_progress', item_id=item.id) }}">
+      <div class="field">
+        <label for="completion_pct">Where are you now? <output id="pct-out" class="range-out">{{ completion }}%</output></label>
+        <input id="completion_pct" type="range" name="completion_pct" min="0" max="100" step="5" value="{{ completion }}"
+               oninput="document.getElementById('pct-out').value = this.value + '%'">
       </div>
-      {% if log.notes %}
-      <div class="log-notes">{{ log.notes }}</div>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
 
-<!-- YouTube recommendations -->
-{% if videos %}
+      <div class="field">
+        <span class="field-label">How did it feel?</span>
+        <div class="segmented segmented-felt">
+          {% for fd in felt_difficulties %}
+          <label class="f-{{ fd }}"><input type="radio" name="felt_difficulty" value="{{ fd }}"><span>{{ fd }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="time_spent_mins">Time spent <span class="hint">minutes</span></label>
+        <input id="time_spent_mins" type="number" name="time_spent_mins" min="0" step="5" placeholder="60" class="input-short">
+      </div>
+
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3" placeholder="What did you cover? Anything blocking you?"></textarea>
+      </div>
+      <div class="form-actions"><button type="submit" class="btn btn-primary">Save log</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    {% if logs %}
+    <ol class="timeline">
+      {% for log in logs %}
+      <li>
+        <div class="tl-head">
+          <span class="tl-date">{{ log.checked_in_at[:10] }}</span>
+          <span class="tl-pct">{{ log.completion_pct }}%</span>
+          {% if log.felt_difficulty %}<span class="pill f-pill-{{ log.felt_difficulty }}">{{ log.felt_difficulty }}</span>{% endif %}
+          {% if log.time_spent_mins %}<span class="muted">{{ log.time_spent_mins }} min</span>{% endif %}
+        </div>
+        {% if log.notes %}<p class="tl-notes">{{ log.notes }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">No sessions logged yet.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if videos and videos.values() | select | list %}
 <section class="card">
-  <h2>Recommended Videos</h2>
-  {% for tag, vids in videos.items() %}
-  {% if vids %}
-  <h3 class="tag-heading">{{ tag }}</h3>
+  <h2>Videos for this topic</h2>
+  {% for tag, vids in videos.items() if vids %}
+  <h3 class="section-label">#{{ tag }}</h3>
   <div class="video-grid">
     {% for v in vids %}
-    <a href="{{ v.url }}" target="_blank" class="video-card {% if v.trusted %}trusted{% endif %}">
-      {% if v.thumbnail %}
-      <img src="{{ v.thumbnail }}" alt="{{ v.title }}">
-      {% endif %}
-      <div class="video-info">
-        <div class="video-title">{{ v.title }}</div>
-        <div class="video-channel">{{ v.channel }}{% if v.trusted %} ✓{% endif %}</div>
-      </div>
+    <a href="{{ v.url }}" target="_blank" rel="noopener" class="video {% if v.trusted %}trusted{% endif %}">
+      {% if v.thumbnail %}<img src="{{ v.thumbnail }}" alt="">{% endif %}
+      <div class="video-title">{{ v.title }}</div>
+      <div class="video-channel">{{ v.channel }}{% if v.trusted %} <span class="check">&check;</span>{% endif %}</div>
     </a>
     {% endfor %}
   </div>
-  {% endif %}
   {% endfor %}
 </section>
 {% endif %}
 
-<form method="POST" action="{{ url_for('delete_item', item_id=item.id) }}"
-      onsubmit="return confirm('Delete this item and all its logs?')">
-  <button type="submit" class="btn-danger">Delete item</button>
-</form>
+<div class="danger-zone">
+  <form method="POST" action="{{ url_for('delete_item', item_id=item.id) }}"
+        onsubmit="return confirm('Delete this item and all its logs?')">
+    <button type="submit" class="btn btn-danger btn-sm">Delete item</button>
+  </form>
+</div>
 {% endblock %}

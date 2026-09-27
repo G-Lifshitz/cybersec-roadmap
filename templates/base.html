@@ -3,26 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}CyberRoadmap{% endblock %}</title>
+  <title>{% block title %}Roadmap{% endblock %} · CyberRoadmap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <nav>
-    <a href="{{ url_for('index') }}" class="nav-logo">[ CYBERMAP ]</a>
-    <div class="nav-links">
-      <a href="{{ url_for('index') }}">Roadmap</a>
-      <a href="{{ url_for('add_item') }}">+ Add Item</a>
-      <a href="{{ url_for('recommendations') }}">Recommendations</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="{{ url_for('index') }}" class="logo"><span class="logo-bracket">&gt;_</span> cyberroadmap</a>
+      <nav class="nav">
+        <a href="{{ url_for('index') }}" class="{% if request.endpoint in ('index', 'item_detail', 'edit_item') %}active{% endif %}">Roadmap</a>
+        <a href="{{ url_for('recommendations') }}" class="{% if request.endpoint == 'recommendations' %}active{% endif %}">Recommendations</a>
+        <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ Add item</a>
+      </nav>
     </div>
-  </nav>
+  </header>
 
-  <main>
+  <main class="container">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="flash-wrap">
-          {% for msg in messages %}
-            <div class="flash">{{ msg }}</div>
-          {% endfor %}
+          {% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}
         </div>
       {% endif %}
     {% endwith %}
