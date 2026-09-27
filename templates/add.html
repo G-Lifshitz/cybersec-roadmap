@@ -1,53 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Add Item{% endblock %}
-
+{% block title %}Add item{% endblock %}
 {% block content %}
-<h1>Add Roadmap Item</h1>
-
-<form method="POST" action="{{ url_for('add_item') }}" class="card form-card">
-  <label>Title *
-    <input type="text" name="title" required placeholder="e.g. Practical Ethical Hacking – TCM">
-  </label>
-
-  <div class="form-row">
-    <label>Type
-      <select name="type">
-        {% for t in item_types %}
-        <option value="{{ t }}">{{ t }}</option>
-        {% endfor %}
-      </select>
-    </label>
-
-    <label>Platform
-      <select name="platform">
-        <option value="">— none —</option>
-        {% for p in platforms %}
-        <option value="{{ p }}">{{ p }}</option>
-        {% endfor %}
-      </select>
-    </label>
-
-    <label>Difficulty
-      <select name="difficulty">
-        {% for d in difficulties %}
-        <option value="{{ d }}">{{ d }}</option>
-        {% endfor %}
-      </select>
-    </label>
-
-    <label>Priority (1–5)
-      <input type="number" name="priority" min="1" max="5" value="3">
-    </label>
-  </div>
-
-  <label>URL
-    <input type="url" name="url" placeholder="https://...">
-  </label>
-
-  <label>Skill tags (comma-separated)
-    <input type="text" name="skill_tags" placeholder="web, network, active directory">
-  </label>
-
-  <button type="submit" class="btn">Add to roadmap</button>
-</form>
+<div class="form-page">
+  <a href="{{ url_for('index') }}" class="back">&larr; Roadmap</a>
+  <h1>Add to roadmap</h1>
+  <p class="muted">A course, cert, lab, book or project you want to work through.</p>
+  <form method="POST" action="{{ url_for('add_item') }}" class="card form-card">
+    {% include "_item_form.html" %}
+    <div class="form-actions">
+      <a href="{{ url_for('index') }}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">Add item</button>
+    </div>
+  </form>
+</div>
 {% endblock %}

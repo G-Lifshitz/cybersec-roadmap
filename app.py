@@ -28,7 +28,13 @@ _rec = RecommendationService()
 
 @app.route("/")
 def index():
-    items = roadmap_model.get_all()
+    filters = {
+        "status": request.args.get("status") or None,
+        "skill": request.args.get("skill") or None,
+        "search": request.args.get("q", "").strip() or None,
+        "type_": request.args.get("type") or None,
+    }
+    items = roadmap_model.get_all(**filters)
     skill_summary = roadmap_model.get_skill_summary()
     weak = progress_model.weak_skills()
     total_mins = progress_model.total_time_spent()
@@ -47,38 +53,78 @@ def index():
         skill_summary=skill_summary,
         weak_skills=weak,
         total_hours=round(total_mins / 60, 1),
+        counts=roadmap_model.get_status_counts(),
         statuses=STATUSES,
+        item_types=ITEM_TYPES,
+        all_tags=roadmap_model.get_all_tags(),
+        filters=filters,
+        filtering=any(filters.values()),
     )
 
 
 # ── Roadmap items ──────────────────────────────────────────────────────────
 
+def _item_form_data():
+    """Read and clean the add/edit form. Shared by both routes so they can't drift apart."""
+    try:
+        priority = max(1, min(5, int(request.form.get("priority", 3))))
+    except ValueError:
+        priority = 3
+    return {
+        "title": request.form.get("title", "").strip(),
+        "type": request.form.get("type", "course"),
+        "platform": request.form.get("platform", ""),
+        "url": request.form.get("url", "").strip(),
+        "skill_tags": request.form.get("skill_tags", ""),
+        "difficulty": request.form.get("difficulty", "beginner"),
+        "priority": priority,
+    }
+
+
+def _form_choices():
+    return dict(item_types=ITEM_TYPES, platforms=PLATFORMS, difficulties=DIFFICULTIES)
+
+
 @app.route("/add", methods=["GET", "POST"])
 def add_item():
     if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        if not title:
+        data = _item_form_data()
+        if not data["title"]:
             flash("Title is required.")
-            return redirect(url_for("add_item"))
+            return render_template("add.html", item=data, **_form_choices())
 
         roadmap_model.create(
-            title=title,
-            type_=request.form.get("type", "course"),
-            platform=request.form.get("platform", ""),
-            url=request.form.get("url", ""),
-            skill_tags=request.form.get("skill_tags", ""),
-            difficulty=request.form.get("difficulty", "beginner"),
-            priority=int(request.form.get("priority", 3)),
+            title=data["title"],
+            type_=data["type"],
+            platform=data["platform"],
+            url=data["url"],
+            skill_tags=data["skill_tags"],
+            difficulty=data["difficulty"],
+            priority=data["priority"],
         )
-        flash(f'"{title}" added to your roadmap.')
+        flash(f'"{data["title"]}" added to your roadmap.')
         return redirect(url_for("index"))
 
-    return render_template(
-        "add.html",
-        item_types=ITEM_TYPES,
-        platforms=PLATFORMS,
-        difficulties=DIFFICULTIES,
-    )
+    return render_template("add.html", item={}, **_form_choices())
+
+
+@app.route("/item/<int:item_id>/edit", methods=["GET", "POST"])
+def edit_item(item_id):
+    item = roadmap_model.get_by_id(item_id)
+    if not item:
+        flash("Item not found.")
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        data = _item_form_data()
+        if not data["title"]:
+            flash("Title is required.")
+            return render_template("edit.html", item={**data, "id": item_id}, **_form_choices())
+        roadmap_model.update(item_id, **data)
+        flash("Changes saved.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    return render_template("edit.html", item=dict(item), **_form_choices())
 
 
 @app.route("/item/<int:item_id>")
