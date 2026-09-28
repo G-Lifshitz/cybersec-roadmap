@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<div class="auth">
+  <div class="auth-head">
+    <div class="auth-mark">&gt;_</div>
+    <h1>Create your account</h1>
+    <p class="muted">Your roadmap and logs stay private to you.</p>
+  </div>
+  <form method="POST" class="card auth-card">
+    <div class="field">
+      <label for="username">Username <span class="hint">3-30 letters, numbers or _</span></label>
+      <input id="username" type="text" name="username" value="{{ username }}" required autofocus
+             minlength="3" maxlength="30" pattern="[A-Za-z0-9_]+" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">Password <span class="hint">at least 8 characters</span></label>
+      <input id="password" type="password" name="password" required minlength="8" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label for="confirm">Confirm password</label>
+      <input id="confirm" type="password" name="confirm" required minlength="8" autocomplete="new-password">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Create account</button>
+  </form>
+  <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+</div>
+{% endblock %}

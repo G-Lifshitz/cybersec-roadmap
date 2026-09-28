@@ -13,11 +13,18 @@
   <header class="topbar">
     <div class="topbar-inner">
       <a href="{{ url_for('index') }}" class="logo"><span class="logo-bracket">&gt;_</span> cyberroadmap</a>
+      {% if g.user %}
       <nav class="nav">
         <a href="{{ url_for('index') }}" class="{% if request.endpoint in ('index', 'item_detail', 'edit_item') %}active{% endif %}">Roadmap</a>
         <a href="{{ url_for('recommendations') }}" class="{% if request.endpoint == 'recommendations' %}active{% endif %}">Recommendations</a>
         <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ Add item</a>
+        <span class="nav-sep"></span>
+        <span class="nav-user">{{ g.user.username }}</span>
+        <form method="POST" action="{{ url_for('logout') }}" class="inline-form">
+          <button type="submit" class="link-btn">Log out</button>
+        </form>
       </nav>
+      {% endif %}
     </div>
   </header>
 

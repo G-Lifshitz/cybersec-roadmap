@@ -1,7 +1,7 @@
 {# Shared by add.html and edit.html. Expects: item (dict, may be empty), item_types, platforms, difficulties #}
 <div class="field">
   <label for="title">Title <span class="req">*</span></label>
-  <input id="title" type="text" name="title" required value="{{ item.title or '' }}"
+  <input id="title" type="text" name="title" required maxlength="200" value="{{ item.title or '' }}"
          placeholder="e.g. Practical Ethical Hacking" autofocus>
 </div>
 
@@ -50,6 +50,6 @@
 
 <div class="field">
   <label for="skill_tags">Skill tags <span class="hint">comma-separated</span></label>
-  <input id="skill_tags" type="text" name="skill_tags" value="{{ item.skill_tags or '' }}"
+  <input id="skill_tags" type="text" name="skill_tags" maxlength="200" value="{{ item.skill_tags or '' }}"
          placeholder="web, network, active directory">
 </div>
