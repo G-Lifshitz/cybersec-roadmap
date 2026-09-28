@@ -5,16 +5,16 @@ from db import get_db
 EDITABLE_FIELDS = ("title", "type", "platform", "url", "skill_tags", "difficulty", "priority")
 
 
-def get_all(status=None, skill=None, search=None, type_=None):
-    """Return roadmap items, optionally filtered.
+def get_all(user_id, status=None, skill=None, search=None, type_=None):
+    """Return one user's roadmap items, optionally filtered.
 
     status: exact match on status column
     skill:  a single tag; matched against the comma-separated skill_tags
     search: free text, matched against title and platform
     type_:  exact match on item type (course, cert, lab, ...)
     """
-    query = "SELECT * FROM roadmap_items WHERE 1=1"
-    params = []
+    query = "SELECT * FROM roadmap_items WHERE user_id = ?"
+    params = [user_id]
     if status:
         query += " AND status = ?"
         params.append(status)
@@ -37,28 +37,35 @@ def get_all(status=None, skill=None, search=None, type_=None):
     return rows
 
 
-def get_by_id(item_id):
+def get_by_id(item_id, user_id):
+    """Return the item only if it belongs to user_id, else None.
+
+    Filtering on owner here (not just in the route) means every caller gets
+    the ownership check for free, so /item/<someone else's id> is a 404.
+    """
     with get_db() as conn:
         return conn.execute(
-            "SELECT * FROM roadmap_items WHERE id = ?", (item_id,)
+            "SELECT * FROM roadmap_items WHERE id = ? AND user_id = ?",
+            (item_id, user_id),
         ).fetchone()
 
 
-def create(title, type_, platform, url, skill_tags, difficulty, priority):
+def create(user_id, title, type_, platform, url, skill_tags, difficulty, priority):
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO roadmap_items
-               (title, type, platform, url, skill_tags, difficulty, priority)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (title, type_, platform, url, normalise_tags(skill_tags), difficulty, priority),
+               (user_id, title, type, platform, url, skill_tags, difficulty, priority)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, title, type_, platform, url, normalise_tags(skill_tags), difficulty, priority),
         )
         return cur.lastrowid
 
 
-def update(item_id, **fields):
+def update(item_id, user_id, **fields):
     """Update the editable fields of an item. Unknown keys are ignored.
 
-    Returns True if a row was changed, False if the item doesn't exist.
+    Returns True if a row was changed, False if the item doesn't exist or
+    belongs to someone else.
     """
     changes = {k: v for k, v in fields.items() if k in EDITABLE_FIELDS}
     if not changes:
@@ -71,40 +78,46 @@ def update(item_id, **fields):
     set_clause = ", ".join(f"{col} = ?" for col in changes)
     with get_db() as conn:
         cur = conn.execute(
-            f"UPDATE roadmap_items SET {set_clause} WHERE id = ?",
-            (*changes.values(), item_id),
+            f"UPDATE roadmap_items SET {set_clause} WHERE id = ? AND user_id = ?",
+            (*changes.values(), item_id, user_id),
         )
         return cur.rowcount > 0
 
 
-def update_status(item_id, status):
+def update_status(item_id, user_id, status):
     with get_db() as conn:
         conn.execute(
-            "UPDATE roadmap_items SET status = ? WHERE id = ?",
-            (status, item_id),
+            "UPDATE roadmap_items SET status = ? WHERE id = ? AND user_id = ?",
+            (status, item_id, user_id),
         )
 
 
-def delete(item_id):
+def delete(item_id, user_id):
+    """Delete an item (its logs go too, via ON DELETE CASCADE). True if something was deleted."""
     with get_db() as conn:
-        conn.execute("DELETE FROM roadmap_items WHERE id = ?", (item_id,))
+        cur = conn.execute(
+            "DELETE FROM roadmap_items WHERE id = ? AND user_id = ?", (item_id, user_id)
+        )
+        return cur.rowcount > 0
 
 
-def get_all_tags():
-    """Sorted list of every distinct skill tag in use — feeds the filter dropdown."""
+def get_all_tags(user_id):
+    """Sorted list of every distinct skill tag this user has — feeds the filter dropdown."""
     with get_db() as conn:
-        rows = conn.execute("SELECT skill_tags FROM roadmap_items").fetchall()
+        rows = conn.execute(
+            "SELECT skill_tags FROM roadmap_items WHERE user_id = ?", (user_id,)
+        ).fetchall()
     tags = set()
     for row in rows:
         tags.update(_split_tags(row["skill_tags"]))
     return sorted(tags)
 
 
-def get_skill_summary():
+def get_skill_summary(user_id):
     """Return each skill tag and counts by status — drives the dashboard."""
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT skill_tags, status FROM roadmap_items"
+            "SELECT skill_tags, status FROM roadmap_items WHERE user_id = ?", (user_id,)
         ).fetchall()
 
     summary = {}
@@ -129,12 +142,13 @@ def _split_tags(raw):
     return [t.strip().lower() for t in (raw or "").split(",") if t.strip()]
 
 
-def get_status_counts():
-    """{'not_started': n, 'in_progress': n, 'completed': n, 'total': n} across all items."""
+def get_status_counts(user_id):
+    """{'not_started': n, 'in_progress': n, 'completed': n, 'total': n} for one user."""
     counts = {"not_started": 0, "in_progress": 0, "completed": 0}
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT status, COUNT(*) AS n FROM roadmap_items GROUP BY status"
+            "SELECT status, COUNT(*) AS n FROM roadmap_items WHERE user_id = ? GROUP BY status",
+            (user_id,),
         ).fetchall()
     for row in rows:
         counts[row["status"]] = row["n"]

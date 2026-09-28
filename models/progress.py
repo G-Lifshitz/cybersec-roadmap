@@ -45,11 +45,11 @@ def latest_completion(item_id):
     return row["completion_pct"] if row else 0
 
 
-def weak_skills(threshold="hard"):
+def weak_skills(user_id):
     """
-    Return skill tags where the user frequently finds things hard/brutal.
+    Return skill tags where this user frequently finds things hard/brutal
+    (more than 50% of their rated logs for that tag are 'hard' or 'brutal').
     Used to personalise YouTube recommendations.
-    threshold: 'hard' returns tags with >50% hard+brutal ratings.
     """
     hard_values = {"hard", "brutal"}
     with get_db() as conn:
@@ -57,7 +57,9 @@ def weak_skills(threshold="hard"):
             """SELECT ri.skill_tags, pl.felt_difficulty
                FROM progress_logs pl
                JOIN roadmap_items ri ON ri.id = pl.item_id
-               WHERE pl.felt_difficulty IS NOT NULL"""
+               WHERE pl.felt_difficulty IS NOT NULL
+                 AND ri.user_id = ?""",
+            (user_id,),
         ).fetchall()
 
     tag_counts = {}
@@ -77,9 +79,13 @@ def weak_skills(threshold="hard"):
     return weak
 
 
-def total_time_spent():
+def total_time_spent(user_id):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT SUM(time_spent_mins) as total FROM progress_logs"
+            """SELECT SUM(pl.time_spent_mins) AS total
+               FROM progress_logs pl
+               JOIN roadmap_items ri ON ri.id = pl.item_id
+               WHERE ri.user_id = ?""",
+            (user_id,),
         ).fetchone()
     return row["total"] or 0
