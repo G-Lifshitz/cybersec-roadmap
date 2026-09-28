@@ -134,3 +134,89 @@ def test_delete_user():
     assert users.delete_user(uid) is True
     assert users.get_by_id(uid) is None
     assert users.delete_user(uid) is False
+
+
+# ── Account settings ────────────────────────────────────────────────────────
+
+def test_change_password_works_and_bumps_epoch():
+    uid = users.create_user("georgy", "old-password")
+    before = users.get_by_id(uid)["session_epoch"]
+    new_epoch = users.change_password(uid, "old-password", "new-password")
+    assert new_epoch == before + 1
+    assert users.authenticate("georgy", "new-password") is not None
+    assert users.authenticate("georgy", "old-password") is None
+
+
+@pytest.mark.parametrize("current, new, msg", [
+    ("wrong-password", "new-password", "Current password is wrong"),
+    ("old-password", "short", "at least 8"),
+    ("old-password", "old-password", "must be different"),
+])
+def test_change_password_rejections(current, new, msg):
+    uid = users.create_user("georgy", "old-password")
+    with pytest.raises(users.AccountError, match=msg):
+        users.change_password(uid, current, new)
+    assert users.get_by_id(uid)["session_epoch"] == 0  # nothing changed
+    assert users.authenticate("georgy", "old-password") is not None
+
+
+def test_registration_error_is_an_account_error():
+    assert issubclass(users.RegistrationError, users.AccountError)
+
+
+def test_delete_account_needs_password_and_wipes_data():
+    import models.progress as progress
+    uid = users.create_user("georgy", "s3cure-pass")
+    item = roadmap.create(uid, "PEH", "course", "", "", "web", "beginner", 3)
+    progress.add_log(item, 50, "fair", "", 60)
+    users.record_login(uid, True, "1.1.1.1")
+
+    with pytest.raises(users.AccountError, match="Password is wrong"):
+        users.delete_account(uid, "nope")
+    assert users.get_by_id(uid) is not None
+
+    users.delete_account(uid, "s3cure-pass")
+    assert users.get_by_id(uid) is None
+    with db.get_db() as conn:
+        for table in ("roadmap_items", "progress_logs", "login_events"):
+            assert conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"] == 0
+
+
+def test_last_admin_cannot_delete_self_but_one_of_two_can():
+    a = users.ensure_admin("admin_one", "admin-pass-1")
+    with pytest.raises(users.AccountError, match="only admin"):
+        users.delete_account(a, "admin-pass-1")
+    b = users.ensure_admin("admin_two", "admin-pass-2")
+    users.delete_account(b, "admin-pass-2")
+    assert users.get_by_id(b) is None
+
+
+# ── Login history ───────────────────────────────────────────────────────────
+
+def test_recent_logins_newest_first_and_private():
+    a = users.create_user("alice", "password-a")
+    b = users.create_user("bob", "password-b")
+    users.record_login(a, False, "6.6.6.6")
+    users.record_login(a, True, "1.2.3.4")
+    users.record_login(b, True, "9.9.9.9")
+    rows = users.recent_logins(a)
+    assert [(r["success"], r["ip"]) for r in rows] == [(1, "1.2.3.4"), (0, "6.6.6.6")]
+    assert users.recent_logins(a, limit=1)[0]["ip"] == "1.2.3.4"
+
+
+def test_failed_since_last_login():
+    uid = users.create_user("alice", "password-a")
+    assert users.failed_since_last_login(uid) == 0
+    users.record_login(uid, False, "x")          # before any success
+    assert users.failed_since_last_login(uid) == 1
+    users.record_login(uid, True, "x")
+    assert users.failed_since_last_login(uid) == 0
+    users.record_login(uid, False, "x")
+    users.record_login(uid, False, "x")
+    assert users.failed_since_last_login(uid) == 2
+
+
+def test_get_id_by_username():
+    uid = users.create_user("Georgy", "s3cure-pass")
+    assert users.get_id_by_username("georgy") == uid   # NOCASE
+    assert users.get_id_by_username("nobody") is None

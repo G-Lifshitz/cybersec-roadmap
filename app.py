@@ -58,6 +58,11 @@ def load_current_user():
     """Look up the logged-in user once per request and keep it on g."""
     user_id = session.get("user_id")
     g.user = users_model.get_by_id(user_id) if user_id else None
+    # A password change bumps session_epoch. A cookie issued before that
+    # (e.g. on another device, or a stolen one) no longer matches -> logged out.
+    if g.user and session.get("epoch") != g.user["session_epoch"]:
+        session.clear()
+        g.user = None
 
 
 def login_required(view):
@@ -104,9 +109,10 @@ def _too_many(template, message, kind, key, window, **ctx):
     return resp
 
 
-def _start_session(user):
+def _start_session(user_id):
     session.clear()  # drop anything from before login (session fixation)
-    session["user_id"] = user["id"]
+    session["user_id"] = user_id
+    session["epoch"] = users_model.get_by_id(user_id)["session_epoch"]
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -130,7 +136,7 @@ def register():
         except users_model.RegistrationError as e:
             flash(str(e))
             return render_template("register.html", username=username)
-        _start_session({"id": user_id})
+        _start_session(user_id)
         flash("Account created. Add the first thing you want to learn.")
         return redirect(url_for("index"))
     return render_template("register.html", username="")
@@ -160,11 +166,20 @@ def login():
         if user is None:
             ratelimit.record("login_fail", account_key)
             ratelimit.record("login_fail_ip", ip)
+            # Only real accounts get a history entry; the message stays identical either way.
+            target_id = users_model.get_id_by_username(username)
+            if target_id:
+                users_model.record_login(target_id, False, ip)
             flash("Wrong username or password.")
             return render_template("login.html", username=username)
 
         ratelimit.clear("login_fail", account_key)  # a success resets that account's count
-        _start_session(user)
+        failed = users_model.failed_since_last_login(user["id"])
+        users_model.record_login(user["id"], True, ip)
+        _start_session(user["id"])
+        if failed:
+            flash(f"Heads up: {failed} failed login attempt{'s' if failed != 1 else ''} "
+                  "on your account since you last logged in. Check Settings if that wasn't you.")
         return redirect(_safe_next(request.args.get("next")))
     return render_template("login.html", username="")
 
@@ -367,6 +382,69 @@ def recommendations():
 
 
 # ── Entry point ────────────────────────────────────────────────────────────
+
+# ── Settings ───────────────────────────────────────────────────────────────
+
+def _settings_page():
+    return render_template("settings.html", logins=users_model.recent_logins(g.user["id"]))
+
+
+def _settings_guard():
+    """Rate-limit wrong 'current password' entries, so a hijacked session can't brute-force it."""
+    key = f"settings|{g.user['id']}"
+    limit, window = LOGIN_FAILS_PER_ACCOUNT
+    if ratelimit.is_limited("login_fail", key, limit, window):
+        return key, _too_many("settings.html", "Too many wrong password attempts.",
+                              "login_fail", key, window,
+                              logins=users_model.recent_logins(g.user["id"]))
+    return key, None
+
+
+@app.route("/settings")
+@login_required
+def settings():
+    return _settings_page()
+
+
+@app.route("/settings/password", methods=["POST"])
+@login_required
+def change_password():
+    key, blocked = _settings_guard()
+    if blocked:
+        return blocked
+    new = request.form.get("new_password", "")
+    if new != request.form.get("confirm", ""):
+        flash("New passwords don't match.")
+        return _settings_page()
+    try:
+        epoch = users_model.change_password(g.user["id"], request.form.get("current_password", ""), new)
+    except users_model.AccountError as e:
+        if "Current password" in str(e):
+            ratelimit.record("login_fail", key)
+        flash(str(e))
+        return _settings_page()
+    session["epoch"] = epoch  # keep THIS session; every other one is now invalid
+    flash("Password changed. You've been logged out on every other device.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/delete", methods=["POST"])
+@login_required
+def delete_account():
+    key, blocked = _settings_guard()
+    if blocked:
+        return blocked
+    try:
+        users_model.delete_account(g.user["id"], request.form.get("password", ""))
+    except users_model.AccountError as e:
+        if "Password is wrong" in str(e):
+            ratelimit.record("login_fail", key)
+        flash(str(e))
+        return _settings_page()
+    session.clear()
+    flash("Your account and all your data have been deleted.")
+    return redirect(url_for("login"))
+
 
 # ── Admin ──────────────────────────────────────────────────────────────────
 

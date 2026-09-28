@@ -15,8 +15,17 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,30}$")
 MIN_PASSWORD_LEN = 8
 
 
-class RegistrationError(ValueError):
-    """Raised with a user-facing message when sign-up input is rejected."""
+class AccountError(ValueError):
+    """Raised with a user-facing message when account input is rejected."""
+
+
+class RegistrationError(AccountError):
+    """Sign-up specifically (bad username, weak password, name taken)."""
+
+
+def _check_password_rules(password, error=AccountError):
+    if len(password or "") < MIN_PASSWORD_LEN:
+        raise error(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
 
 
 def create_user(username, password):
@@ -24,8 +33,7 @@ def create_user(username, password):
     username = (username or "").strip()
     if not USERNAME_RE.match(username):
         raise RegistrationError("Username must be 3-30 characters: letters, numbers or underscores.")
-    if len(password or "") < MIN_PASSWORD_LEN:
-        raise RegistrationError(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
+    _check_password_rules(password, RegistrationError)
 
     try:
         with get_db() as conn:
@@ -57,7 +65,8 @@ def authenticate(username, password):
 def get_by_id(user_id):
     with get_db() as conn:
         return conn.execute(
-            "SELECT id, username, is_admin, created_at FROM users WHERE id = ?", (user_id,)
+            "SELECT id, username, is_admin, session_epoch, created_at FROM users WHERE id = ?",
+            (user_id,),
         ).fetchone()
 
 
@@ -108,3 +117,96 @@ def delete_user(user_id):
     with get_db() as conn:
         cur = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         return cur.rowcount > 0
+
+
+
+# ── Account settings ───────────────────────────────────────────────────────
+
+def _password_matches(user_id, password):
+    with get_db() as conn:
+        row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+    return bool(row) and check_password_hash(row["password_hash"], password or "")
+
+
+def change_password(user_id, current, new):
+    """Replace the password after re-checking the current one.
+
+    Also bumps session_epoch, which invalidates every other logged-in session
+    (a stolen cookie stops working once the owner changes their password).
+    Returns the new epoch so the caller can keep the current session alive.
+    """
+    if not _password_matches(user_id, current):
+        raise AccountError("Current password is wrong.")
+    _check_password_rules(new)
+    if current == new:
+        raise AccountError("New password must be different from the current one.")
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ?, session_epoch = session_epoch + 1 WHERE id = ?",
+            (generate_password_hash(new), user_id),
+        )
+        return conn.execute(
+            "SELECT session_epoch FROM users WHERE id = ?", (user_id,)
+        ).fetchone()["session_epoch"]
+
+
+def delete_account(user_id, password):
+    """Self-service account deletion (GDPR right to erasure).
+
+    Needs the password, so an unattended logged-in laptop can't be used to
+    wipe someone's data. ON DELETE CASCADE removes items, logs and login events.
+    The last remaining admin can't delete themselves (nobody could manage the app).
+    """
+    if not _password_matches(user_id, password):
+        raise AccountError("Password is wrong.")
+    with get_db() as conn:
+        user = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+        if user["is_admin"]:
+            admins = conn.execute("SELECT COUNT(*) AS n FROM users WHERE is_admin = 1").fetchone()["n"]
+            if admins <= 1:
+                raise AccountError("You're the only admin, so this account can't be deleted.")
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+# ── Login history ──────────────────────────────────────────────────────────
+
+def get_id_by_username(username):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ?", ((username or "").strip(),)
+        ).fetchone()
+    return row["id"] if row else None
+
+
+def record_login(user_id, success, ip):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO login_events (user_id, success, ip) VALUES (?, ?, ?)",
+            (user_id, 1 if success else 0, ip),
+        )
+
+
+def recent_logins(user_id, limit=10):
+    """Newest first. id DESC breaks ties between events in the same second."""
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT success, ip, created_at FROM login_events
+               WHERE user_id = ? ORDER BY id DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+
+
+def failed_since_last_login(user_id):
+    """Failed attempts after the previous successful login (call before recording the new one).
+
+    Shown as a warning when someone logs in: "3 failed attempts since your last login".
+    """
+    with get_db() as conn:
+        last_ok = conn.execute(
+            "SELECT MAX(id) AS id FROM login_events WHERE user_id = ? AND success = 1",
+            (user_id,),
+        ).fetchone()["id"] or 0
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM login_events WHERE user_id = ? AND success = 0 AND id > ?",
+            (user_id, last_ok),
+        ).fetchone()["n"]

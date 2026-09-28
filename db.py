@@ -59,7 +59,16 @@ def init_db():
                 username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL,
                 is_admin      INTEGER NOT NULL DEFAULT 0,
+                session_epoch INTEGER NOT NULL DEFAULT 0,  -- bumped on password change; old cookies stop working
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS login_events (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                success    INTEGER NOT NULL,          -- 1 = logged in, 0 = wrong password
+                ip         TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS roadmap_items (
@@ -100,22 +109,25 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_rate_lookup ON rate_events(kind, key, created_at)"
         )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, id)"
+        )
 
 
 def _migrate(conn):
-    """Bring a database created before accounts existed up to date.
+    """Bring a database created by an older version of the app up to date.
 
     CREATE TABLE IF NOT EXISTS won't add a column to a table that's already
-    there, so older roadmap.db files need user_id added by hand. Items created
-    before this migration have user_id NULL and belong to nobody.
+    there, so columns added after launch are added here if missing. Items
+    created before accounts existed have user_id NULL and belong to nobody.
     """
-    cols = {row["name"] for row in conn.execute("PRAGMA table_info(roadmap_items)")}
-    if "user_id" not in cols:
-        conn.execute(
-            "ALTER TABLE roadmap_items ADD COLUMN user_id INTEGER "
-            "REFERENCES users(id) ON DELETE CASCADE"
-        )
-
-    user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
-    if "is_admin" not in user_cols:
-        conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+    added_columns = [
+        ("roadmap_items", "user_id", "INTEGER REFERENCES users(id) ON DELETE CASCADE"),
+        ("users", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
+        ("users", "session_epoch", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+    # Table/column names here are fixed strings from the list above, never input.
+    for table, column, definition in added_columns:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

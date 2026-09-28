@@ -245,3 +245,12 @@ input[type=password] { width: 100%; font: 14px var(--sans); color: var(--text); 
 .mono { font-family: var(--mono); font-size: 13px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .card-head h2 { margin: 0; }
+
+/* ── Settings ───────────────────────────────────────────────────────────── */
+a.nav-user { text-decoration: none; border-radius: 8px; padding: 6px 8px; }
+a.nav-user:hover, a.nav-user.active { color: var(--text); background: var(--surface); }
+.field-grid-even { grid-template-columns: 1fr 1fr; }
+.card-danger { border-color: rgba(255, 92, 122, .3); }
+.card-danger h2 { color: var(--red); }
+.small-note { font-size: 13px; margin-top: 12px; }
+.form-page .card { margin-top: 20px; }

@@ -22,7 +22,7 @@
         <a href="{{ url_for('admin') }}" class="{% if request.endpoint == 'admin' %}active{% endif %}">Admin</a>
         {% endif %}
         <span class="nav-sep"></span>
-        <span class="nav-user">{{ g.user.username }}</span>
+        <a href="{{ url_for('settings') }}" class="nav-user {% if request.endpoint == 'settings' %}active{% endif %}" title="Account settings">{{ g.user.username }}</a>
         <form method="POST" action="{{ url_for('logout') }}" class="inline-form">
           <button type="submit" class="link-btn">Log out</button>
         </form>
