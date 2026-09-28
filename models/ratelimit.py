@@ -66,3 +66,24 @@ def prune(older_than, now=None):
     now = time.time() if now is None else now
     with get_db() as conn:
         conn.execute("DELETE FROM rate_events WHERE created_at < ?", (now - older_than,))
+
+
+def clear_kinds(*kinds):
+    """Remove every event of the given kinds (admin 'clear lockouts' button). Returns rows removed."""
+    placeholders = ", ".join("?" for _ in kinds)
+    with get_db() as conn:
+        cur = conn.execute(f"DELETE FROM rate_events WHERE kind IN ({placeholders})", kinds)
+        return cur.rowcount
+
+
+def active_lockouts(kind, limit, window, now=None):
+    """Keys that are currently over the limit, with their failure counts."""
+    now = time.time() if now is None else now
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT key, COUNT(*) AS n FROM rate_events
+               WHERE kind = ? AND created_at > ?
+               GROUP BY key HAVING COUNT(*) >= ?
+               ORDER BY n DESC""",
+            (kind, now - window, limit),
+        ).fetchall()

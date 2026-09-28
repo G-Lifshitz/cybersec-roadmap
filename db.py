@@ -58,6 +58,7 @@ def init_db():
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL,
+                is_admin      INTEGER NOT NULL DEFAULT 0,
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -114,3 +115,7 @@ def _migrate(conn):
             "ALTER TABLE roadmap_items ADD COLUMN user_id INTEGER "
             "REFERENCES users(id) ON DELETE CASCADE"
         )
+
+    user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if "is_admin" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")

@@ -18,6 +18,9 @@
         <a href="{{ url_for('index') }}" class="{% if request.endpoint in ('index', 'item_detail', 'edit_item') %}active{% endif %}">Roadmap</a>
         <a href="{{ url_for('recommendations') }}" class="{% if request.endpoint == 'recommendations' %}active{% endif %}">Recommendations</a>
         <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ Add item</a>
+        {% if g.user.is_admin %}
+        <a href="{{ url_for('admin') }}" class="{% if request.endpoint == 'admin' %}active{% endif %}">Admin</a>
+        {% endif %}
         <span class="nav-sep"></span>
         <span class="nav-user">{{ g.user.username }}</span>
         <form method="POST" action="{{ url_for('logout') }}" class="inline-form">

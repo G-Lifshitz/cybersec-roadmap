@@ -87,3 +87,50 @@ def test_login_injection_does_not_bypass_auth(payload):
     users.create_user("georgy", "s3cure-pass")
     assert users.authenticate(payload, "anything") is None
     assert users.authenticate("georgy", payload) is None
+
+
+# ── Admin ───────────────────────────────────────────────────────────────────
+
+def test_ensure_admin_creates_admin_account():
+    uid = users.ensure_admin("root_admin", "admin-pass-123")
+    assert users.get_by_id(uid)["is_admin"] == 1
+    assert users.authenticate("root_admin", "admin-pass-123") is not None
+
+
+def test_ensure_admin_promotes_existing_user_without_changing_password():
+    uid = users.create_user("georgy", "original-pass")
+    assert users.ensure_admin("georgy", "different-pass") == uid
+    assert users.get_by_id(uid)["is_admin"] == 1
+    assert users.authenticate("georgy", "original-pass") is not None
+
+
+def test_ensure_admin_is_idempotent_and_skips_when_unset():
+    first = users.ensure_admin("root_admin", "admin-pass-123")
+    assert users.ensure_admin("root_admin", "admin-pass-123") == first
+    assert users.ensure_admin(None, None) is None
+    assert users.ensure_admin("root_admin", "") is None
+
+
+def test_normal_signups_are_not_admin():
+    uid = users.create_user("georgy", "s3cure-pass")
+    assert users.get_by_id(uid)["is_admin"] == 0
+
+
+def test_list_with_stats_counts_and_hides_hashes():
+    import models.progress as progress
+    a = users.create_user("alice", "password-a")
+    users.create_user("bob", "password-b")
+    item = roadmap.create(a, "PEH", "course", "", "", "web", "beginner", 3)
+    progress.add_log(item, 50, "fair", "", 90)
+    progress.add_log(item, 70, "hard", "", 30)
+    rows = {r["username"]: r for r in users.list_with_stats()}
+    assert (rows["alice"]["items"], rows["alice"]["logs"], rows["alice"]["minutes"]) == (1, 2, 120)
+    assert (rows["bob"]["items"], rows["bob"]["logs"], rows["bob"]["minutes"]) == (0, 0, 0)
+    assert "password_hash" not in rows["alice"].keys()
+
+
+def test_delete_user():
+    uid = users.create_user("georgy", "s3cure-pass")
+    assert users.delete_user(uid) is True
+    assert users.get_by_id(uid) is None
+    assert users.delete_user(uid) is False

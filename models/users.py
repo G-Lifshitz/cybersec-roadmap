@@ -57,5 +57,54 @@ def authenticate(username, password):
 def get_by_id(user_id):
     with get_db() as conn:
         return conn.execute(
-            "SELECT id, username, created_at FROM users WHERE id = ?", (user_id,)
+            "SELECT id, username, is_admin, created_at FROM users WHERE id = ?", (user_id,)
         ).fetchone()
+
+
+# ── Admin ──────────────────────────────────────────────────────────────────
+
+def ensure_admin(username, password):
+    """Make sure an admin account exists. Called at startup from env vars.
+
+    - no such user: create it (same validation as normal sign-up) as admin
+    - user exists:  promote to admin, leave the password alone
+
+    Returns the admin's id, or None if username/password weren't provided.
+    """
+    if not username or not password:
+        return None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ?", (username.strip(),)
+        ).fetchone()
+    user_id = row["id"] if row else create_user(username, password)
+    with get_db() as conn:
+        conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user_id,))
+    return user_id
+
+
+def list_with_stats():
+    """Every user with item/log counts and total minutes — for the admin panel.
+
+    Note what's NOT selected: password_hash, and the content of anyone's roadmap.
+    """
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT u.id, u.username, u.is_admin, u.created_at,
+                      COUNT(DISTINCT ri.id)            AS items,
+                      COUNT(pl.id)                     AS logs,
+                      COALESCE(SUM(pl.time_spent_mins), 0) AS minutes,
+                      MAX(pl.checked_in_at)            AS last_active
+               FROM users u
+               LEFT JOIN roadmap_items ri ON ri.user_id = u.id
+               LEFT JOIN progress_logs pl ON pl.item_id = ri.id
+               GROUP BY u.id
+               ORDER BY u.created_at"""
+        ).fetchall()
+
+
+def delete_user(user_id):
+    """Delete an account; ON DELETE CASCADE removes their items and logs too."""
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        return cur.rowcount > 0

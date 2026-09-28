@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Admin</h1>
+    <p class="muted">Accounts and login security. Roadmap contents stay private to each user.</p>
+  </div>
+</div>
+
+<section class="stats">
+  <div class="stat"><span class="stat-value">{{ totals.users }}</span><span class="stat-label">users</span></div>
+  <div class="stat"><span class="stat-value">{{ totals.items }}</span><span class="stat-label">roadmap items</span></div>
+  <div class="stat"><span class="stat-value">{{ totals.logs }}</span><span class="stat-label">sessions logged</span></div>
+  <div class="stat"><span class="stat-value">{{ totals.hours }}<small>h</small></span><span class="stat-label">total study</span></div>
+</section>
+
+<section class="card">
+  <h2>Users</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>User</th><th>Joined</th><th class="num">Items</th><th class="num">Logs</th><th class="num">Hours</th><th>Last active</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><span class="mono">{{ u.username }}</span>{% if u.is_admin %} <span class="pill s-pill-completed">admin</span>{% endif %}</td>
+          <td class="muted mono">{{ u.created_at[:10] }}</td>
+          <td class="num">{{ u.items }}</td>
+          <td class="num">{{ u.logs }}</td>
+          <td class="num">{{ (u.minutes / 60) | round(1) }}</td>
+          <td class="muted mono">{{ u.last_active[:10] if u.last_active else '—' }}</td>
+          <td class="actions">
+            {% if u.id != g.user.id %}
+            <form method="POST" action="{{ url_for('admin_delete_user', user_id=u.id) }}"
+                  onsubmit="return confirm('Delete {{ u.username }} and all their data? This cannot be undone.')">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Login lockouts</h2>
+    {% if account_locks or ip_locks %}
+    <form method="POST" action="{{ url_for('admin_clear_lockouts') }}">
+      <button type="submit" class="btn btn-ghost btn-sm">Lift all lockouts</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if account_locks or ip_locks %}
+  <table class="table">
+    <thead><tr><th>Locked</th><th>Type</th><th class="num">Failed attempts</th></tr></thead>
+    <tbody>
+      {% for l in account_locks %}<tr><td class="mono">{{ l.key }}</td><td>account + IP</td><td class="num">{{ l.n }}</td></tr>{% endfor %}
+      {% for l in ip_locks %}<tr><td class="mono">{{ l.key }}</td><td>whole IP</td><td class="num">{{ l.n }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Nobody is locked out right now.</p>
+  {% endif %}
+</section>
+{% endblock %}

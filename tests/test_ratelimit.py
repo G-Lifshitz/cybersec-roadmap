@@ -65,3 +65,19 @@ def test_prune_removes_only_old_rows():
     rl.record("register", "ip", now=T0 + 90_000)
     rl.prune(older_than=86_400, now=T0 + 90_001)
     assert rl.count_recent("register", "ip", 10**9, now=T0 + 90_001) == 1
+
+
+def test_active_lockouts_lists_only_keys_over_limit():
+    for i in range(5):
+        rl.record("login_fail", "alice|ip", now=T0 + i)
+    rl.record("login_fail", "bob|ip", now=T0)
+    locked = rl.active_lockouts("login_fail", 5, 900, now=T0 + 10)
+    assert [(r["key"], r["n"]) for r in locked] == [("alice|ip", 5)]
+
+
+def test_clear_kinds_removes_only_those_kinds():
+    rl.record("login_fail", "k", now=T0)
+    rl.record("login_fail_ip", "ip", now=T0)
+    rl.record("register", "ip", now=T0)
+    assert rl.clear_kinds("login_fail", "login_fail_ip") == 2
+    assert rl.count_recent("register", "ip", 900, now=T0 + 1) == 1

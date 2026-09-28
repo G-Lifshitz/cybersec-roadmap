@@ -2,7 +2,7 @@ import os
 import secrets
 from functools import wraps
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -66,6 +66,16 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         if g.user is None:
             return redirect(url_for("login", next=request.path))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def admin_required(view):
+    """Decorator: admins only. Everyone else gets a 404, as if the page didn't exist."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if g.user is None or not g.user["is_admin"]:
+            abort(404)
         return view(*args, **kwargs)
     return wrapped
 
@@ -358,12 +368,55 @@ def recommendations():
 
 # ── Entry point ────────────────────────────────────────────────────────────
 
+# ── Admin ──────────────────────────────────────────────────────────────────
+
+@app.route("/admin")
+@admin_required
+def admin():
+    users = users_model.list_with_stats()
+    return render_template(
+        "admin.html",
+        users=users,
+        totals={
+            "users": len(users),
+            "items": sum(u["items"] for u in users),
+            "logs": sum(u["logs"] for u in users),
+            "hours": round(sum(u["minutes"] for u in users) / 60, 1),
+        },
+        account_locks=ratelimit.active_lockouts("login_fail", *LOGIN_FAILS_PER_ACCOUNT),
+        ip_locks=ratelimit.active_lockouts("login_fail_ip", *LOGIN_FAILS_PER_IP),
+    )
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    if user_id == g.user["id"]:
+        flash("You can't delete your own admin account.")
+    elif users_model.delete_user(user_id):
+        flash("User and all their data deleted.")
+    else:
+        flash("User not found.")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/lockouts/clear", methods=["POST"])
+@admin_required
+def admin_clear_lockouts():
+    n = ratelimit.clear_kinds("login_fail", "login_fail_ip")
+    flash(f"Cleared {n} failed-login records. All lockouts lifted.")
+    return redirect(url_for("admin"))
+
+
 @app.errorhandler(413)
 def too_large(_):
     return "Request too large.", 413
 
 
 init_db()
+# Admin account comes from the environment, never from source code.
+# Leave ADMIN_USERNAME / ADMIN_PASSWORD unset and no admin is created.
+users_model.ensure_admin(os.environ.get("ADMIN_USERNAME"), os.environ.get("ADMIN_PASSWORD"))
 ratelimit.prune(older_than=24 * 60 * 60)  # drop day-old rate-limit rows at startup
 
 if __name__ == "__main__":
