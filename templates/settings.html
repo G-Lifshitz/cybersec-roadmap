@@ -2,6 +2,7 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
 <div class="form-page">
+  <p class="eyebrow">Profile</p>
   <h1>Account settings</h1>
   <p class="muted">Signed in as <span class="mono">{{ g.user.username }}</span>{% if g.user.is_admin %} · admin{% endif %} · member since {{ g.user.created_at[:10] }}</p>
 

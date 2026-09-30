@@ -12,7 +12,7 @@
       {% if item.platform %}<span class="item-platform">{{ item.platform }}</span>{% endif %}
       <span class="pill d-{{ item.difficulty }}">{{ item.difficulty }}</span>
       <span class="pill s-pill-{{ item.status }}">{{ item.status | replace('_', ' ') }}</span>
-      {% for t in (item.skill_tags or '').split(',') if t.strip() %}<span class="mini-tag">#{{ t.strip() }}</span>{% endfor %}
+      {% for t in item.skill_tags | tags %}<span class="mini-tag">#{{ t }}</span>{% endfor %}
     </div>
   </div>
   <div class="head-actions">

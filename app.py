@@ -13,6 +13,8 @@ import models.progress as progress_model
 import models.users as users_model
 import models.ratelimit as ratelimit
 from services.youtube import RecommendationService
+from ui.icons import icon
+from ui.navigation import links_for
 
 app = Flask(__name__)
 # The secret key signs the session cookie that says who is logged in. With no
@@ -49,6 +51,15 @@ FELT_DIFFICULTIES = ["easy", "fair", "hard", "brutal"]
 
 # Single Facade instance — all routes call through it
 _rec = RecommendationService()
+
+# Template helpers: {{ icon('book') }} and {% for t in item.skill_tags | tags %}
+app.add_template_global(icon)
+app.add_template_filter(roadmap_model.split_tags, "tags")
+
+
+@app.context_processor
+def inject_navigation():
+    return {"nav_links": links_for(g.get("user"))}
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────
@@ -317,8 +328,7 @@ def item_detail(item_id):
     completion = progress_model.latest_completion(item_id)
 
     # YouTube recommendations via the RecommendationService facade
-    tags = [t.strip() for t in (item["skill_tags"] or "").split(",") if t.strip()]
-    videos = _rec.for_item(tags)
+    videos = _rec.for_item(roadmap_model.split_tags(item["skill_tags"]))
 
     return render_template(
         "item.html",

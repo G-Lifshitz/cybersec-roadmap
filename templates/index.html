@@ -4,8 +4,9 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <p class="eyebrow">Roadmap</p>
     <h1>Your roadmap</h1>
-    <p class="muted">Everything you're planning to learn, and how far along you are.</p>
+    <p class="lede">Everything you're planning to learn, and how far along you are.</p>
   </div>
 </div>
 
@@ -62,7 +63,7 @@
         <span class="pill pill-type">{{ item.type }}</span>
         {% if item.platform %}<span class="item-platform">{{ item.platform }}</span>{% endif %}
         <span class="pill d-{{ item.difficulty }}">{{ item.difficulty }}</span>
-        {% for t in (item.skill_tags or '').split(',') if t.strip() %}<span class="mini-tag">#{{ t.strip() }}</span>{% endfor %}
+        {% for t in item.skill_tags | tags %}<span class="mini-tag">#{{ t }}</span>{% endfor %}
       </div>
     </div>
     <div class="item-side">

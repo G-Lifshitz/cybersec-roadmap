@@ -212,3 +212,8 @@ def test_update_cannot_inject_through_column_names():
     # Keys aren't in EDITABLE_FIELDS, so they never reach the SQL string
     assert roadmap.update(item_id, UID, **{"title = 'x', user_id": 999}) is False
     assert roadmap.get_by_id(item_id, UID)["title"] == "Item"
+
+
+def test_split_tags_trims_lowercases_and_drops_empties():
+    assert roadmap.split_tags(" Web, NETWORK ,, ") == ["web", "network"]
+    assert roadmap.split_tags(None) == []

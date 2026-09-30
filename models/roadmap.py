@@ -33,7 +33,7 @@ def get_all(user_id, status=None, skill=None, search=None, type_=None):
     # doesn't also match "web3" or "webapp".
     if skill:
         skill = skill.strip().lower()
-        rows = [r for r in rows if skill in _split_tags(r["skill_tags"])]
+        rows = [r for r in rows if skill in split_tags(r["skill_tags"])]
     return rows
 
 
@@ -109,7 +109,7 @@ def get_all_tags(user_id):
         ).fetchall()
     tags = set()
     for row in rows:
-        tags.update(_split_tags(row["skill_tags"]))
+        tags.update(split_tags(row["skill_tags"]))
     return sorted(tags)
 
 
@@ -122,7 +122,7 @@ def get_skill_summary(user_id):
 
     summary = {}
     for row in rows:
-        for tag in _split_tags(row["skill_tags"]):
+        for tag in split_tags(row["skill_tags"]):
             if tag not in summary:
                 summary[tag] = {"not_started": 0, "in_progress": 0, "completed": 0}
             summary[tag][row["status"]] = summary[tag].get(row["status"], 0) + 1
@@ -132,13 +132,14 @@ def get_skill_summary(user_id):
 def normalise_tags(raw):
     """'Web, NETWORK ,, web' -> 'web,network' (lowercase, trimmed, de-duplicated, order kept)."""
     seen = []
-    for tag in _split_tags(raw):
+    for tag in split_tags(raw):
         if tag not in seen:
             seen.append(tag)
     return ",".join(seen)
 
 
-def _split_tags(raw):
+def split_tags(raw):
+    """'web, Network,,' -> ['web', 'network']. Shared by the model, routes and templates."""
     return [t.strip().lower() for t in (raw or "").split(",") if t.strip()]
 
 

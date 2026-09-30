@@ -3,35 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Roadmap{% endblock %} · CyberRoadmap</title>
+  <title>{% block title %}Roadmap{% endblock %} · cyberroadmap</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a href="{{ url_for('index') }}" class="logo"><span class="logo-bracket">&gt;_</span> cyberroadmap</a>
-      {% if g.user %}
-      <nav class="nav">
-        <a href="{{ url_for('index') }}" class="{% if request.endpoint in ('index', 'item_detail', 'edit_item') %}active{% endif %}">Roadmap</a>
-        <a href="{{ url_for('recommendations') }}" class="{% if request.endpoint == 'recommendations' %}active{% endif %}">Recommendations</a>
-        <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-sm">+ Add item</a>
-        {% if g.user.is_admin %}
-        <a href="{{ url_for('admin') }}" class="{% if request.endpoint == 'admin' %}active{% endif %}">Admin</a>
-        {% endif %}
-        <span class="nav-sep"></span>
-        <a href="{{ url_for('settings') }}" class="nav-user {% if request.endpoint == 'settings' %}active{% endif %}" title="Account settings">{{ g.user.username }}</a>
-        <form method="POST" action="{{ url_for('logout') }}" class="inline-form">
-          <button type="submit" class="link-btn">Log out</button>
-        </form>
-      </nav>
-      {% endif %}
+{% if g.user %}
+<div class="shell">
+  <aside class="sidebar">
+    <a href="{{ url_for('index') }}" class="logo">cyberroadmap</a>
+    <nav class="side-nav" aria-label="Main">
+      {% for link in nav_links %}
+      <a href="{{ url_for(link.endpoint) }}"{% if request.endpoint in link.active_on %} class="active" aria-current="page"{% endif %}>
+        {{ icon(link.icon) }}<span>{{ link.label }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+    <a href="{{ url_for('add_item') }}" class="btn btn-primary side-add">{{ icon('plus') }} Add item</a>
+    <div class="sidebar-foot">
+      <span class="side-user" title="Signed in as {{ g.user.username }}">{{ g.user.username }}</span>
+      <form method="POST" action="{{ url_for('logout') }}" class="inline-form">
+        <button type="submit" class="link-btn">Log out</button>
+      </form>
     </div>
-  </header>
+  </aside>
+{% endif %}
 
-  <main class="container">
+  <main class="{{ 'main' if g.user else 'auth-shell' }}">
+    {% if not g.user %}<a href="{{ url_for('login') }}" class="logo logo-center">cyberroadmap</a>{% endif %}
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="flash-wrap">
@@ -42,5 +43,8 @@
 
     {% block content %}{% endblock %}
   </main>
+{% if g.user %}
+</div>
+{% endif %}
 </body>
 </html>
