@@ -92,6 +92,17 @@ def init_db():
                 created_at REAL NOT NULL    -- unix time, seconds
             );
 
+            CREATE TABLE IF NOT EXISTS assessments (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                field     TEXT NOT NULL,     -- key in services/question_bank.py
+                answers   TEXT NOT NULL,     -- JSON {question_id: option_index}
+                score     INTEGER NOT NULL,
+                max_score INTEGER NOT NULL,
+                level     TEXT NOT NULL,     -- none | beginner | intermediate | advanced
+                taken_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS progress_logs (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id         INTEGER NOT NULL REFERENCES roadmap_items(id) ON DELETE CASCADE,
@@ -111,6 +122,9 @@ def init_db():
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_assessments_user ON assessments(user_id, id)"
         )
 
 

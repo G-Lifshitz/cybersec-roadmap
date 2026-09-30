@@ -12,7 +12,10 @@ import models.roadmap as roadmap_model
 import models.progress as progress_model
 import models.users as users_model
 import models.ratelimit as ratelimit
+import models.assessment as assessment_model
 from services.youtube import RecommendationService
+from services.assessment import AssessmentError, Questionnaire
+from services.question_bank import FIELDS as QUESTION_BANK
 from ui.icons import icon
 from ui.navigation import links_for
 
@@ -51,6 +54,8 @@ FELT_DIFFICULTIES = ["easy", "fair", "hard", "brutal"]
 
 # Single Facade instance — all routes call through it
 _rec = RecommendationService()
+# The question bank is injected here, so the scoring code never imports the data itself
+_quiz = Questionnaire(QUESTION_BANK)
 
 # Template helpers: {{ icon('book') }} and {% for t in item.skill_tags | tags %}
 app.add_template_global(icon)
@@ -148,8 +153,8 @@ def register():
             flash(str(e))
             return render_template("register.html", username=username)
         _start_session(user_id)
-        flash("Account created. Add the first thing you want to learn.")
-        return redirect(url_for("index"))
+        flash("Account created. Take the short assessment to find your level.")
+        return redirect(url_for("assessment"))
     return render_template("register.html", username="")
 
 
@@ -391,7 +396,53 @@ def recommendations():
     )
 
 
-# ── Entry point ────────────────────────────────────────────────────────────
+# ── Career assessment ──────────────────────────────────────────────────────
+
+@app.route("/assessment")
+@login_required
+def assessment():
+    return render_template(
+        "assessment.html",
+        fields=_quiz.fields(),
+        names=_quiz.names(),
+        history=assessment_model.history(g.user["id"]),
+    )
+
+
+@app.route("/assessment/<field>", methods=["GET", "POST"])
+@login_required
+def take_assessment(field):
+    questions = _quiz.field(field)
+    if questions is None:
+        abort(404)
+    if request.method == "POST":
+        try:
+            result = _quiz.score(field, request.form)
+        except AssessmentError as e:
+            flash(str(e))
+            return render_template("quiz.html", field_key=field, field=questions, chosen=request.form)
+        attempt_id = assessment_model.save(
+            g.user["id"], field, result.answers, result.score, result.max_score, result.level
+        )
+        return redirect(url_for("assessment_result", attempt_id=attempt_id))
+    return render_template("quiz.html", field_key=field, field=questions, chosen={})
+
+
+@app.route("/assessment/result/<int:attempt_id>")
+@login_required
+def assessment_result(attempt_id):
+    attempt = assessment_model.get(attempt_id, g.user["id"])  # owner-scoped
+    if attempt is None:
+        flash("Result not found.")
+        return redirect(url_for("assessment"))
+    try:
+        # Recomputed from the stored answers, so strengths and gaps aren't duplicated in the DB
+        result = _quiz.score(attempt["field"], attempt["answers"])
+    except AssessmentError:
+        flash("That result was taken on an older version of the questions. Please retake it.")
+        return redirect(url_for("assessment"))
+    return render_template("result.html", result=result, taken_at=attempt["taken_at"])
+
 
 # ── Settings ───────────────────────────────────────────────────────────────
 

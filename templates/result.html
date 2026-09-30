@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ result.level_label }} · {{ result.field_name }}{% endblock %}
+{% block content %}
+<a href="{{ url_for('assessment') }}" class="back">&larr; Assessment</a>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">{{ result.field_name }}</p>
+    <h1>{{ result.level_label }}</h1>
+    <p class="lede">{{ result.score }} of {{ result.max_score }} points ({{ result.percent }}%), taken {{ taken_at[:10] }}.</p>
+  </div>
+  <div class="head-actions">
+    <a href="{{ url_for('take_assessment', field=result.field) }}" class="btn btn-ghost">Retake</a>
+  </div>
+</div>
+
+<ol class="level-scale" aria-label="Level">
+  {% for label, state in result.scale %}
+  <li class="{{ state }}">{{ label }}</li>
+  {% endfor %}
+</ol>
+
+<div class="detail-grid">
+  <section class="card">
+    <h2>Strengths</h2>
+    {% if result.strengths %}
+    <div class="chips">{% for s in result.strengths %}<span class="chip chip-good">{{ s }}</span>{% endfor %}</div>
+    {% else %}
+    <p class="muted">No clear strengths yet. That's what the roadmap is for.</p>
+    {% endif %}
+    <h2 class="mt">Gaps to work on</h2>
+    {% if result.gaps %}
+    <div class="chips">{% for s in result.gaps %}<span class="chip chip-gap">{{ s }}</span>{% endfor %}</div>
+    {% else %}
+    <p class="muted">No obvious gaps at this level.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Roles at this level</h2>
+    <ul class="plain-list">{% for r in result.roles %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% if result.freelance %}
+    <h2 class="mt">Freelance and side work</h2>
+    <ul class="plain-list">{% for f in result.freelance %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

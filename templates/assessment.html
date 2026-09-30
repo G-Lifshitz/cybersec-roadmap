@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Assessment{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Assessment</p>
+    <h1>Find your level</h1>
+    <p class="lede">Pick the field you want to work in and answer a few short questions. You'll get a level, your strengths and gaps, and the roles that fit.</p>
+  </div>
+</div>
+
+<section class="field-cards">
+  {% for f in fields %}
+  <a href="{{ url_for('take_assessment', field=f.key) }}" class="field-card">
+    <h3>{{ f.name }}</h3>
+    <p class="muted">{{ f.blurb }}</p>
+    <span class="field-card-foot">{{ f.questions }} questions {{ icon('arrow') }}</span>
+  </a>
+  {% endfor %}
+</section>
+
+{% if history %}
+<section class="card">
+  <h2>Your results</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Taken (UTC)</th><th>Field</th><th>Level</th><th class="num">Score</th><th></th></tr></thead>
+      <tbody>
+        {% for h in history %}
+        <tr>
+          <td class="mono muted">{{ h.taken_at[:16] }}</td>
+          <td>{{ names.get(h.field, h.field) }}</td>
+          <td><span class="pill lvl-{{ h.level }}">{{ h.level }}</span></td>
+          <td class="num">{{ h.percent }}%</td>
+          <td class="actions"><a href="{{ url_for('assessment_result', attempt_id=h.id) }}">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
