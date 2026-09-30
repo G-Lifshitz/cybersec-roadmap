@@ -31,3 +31,35 @@ Decision: Split into two independent modules — `models/roadmap.py` owns the `r
 Alternatives considered: A single `models.py` file with all functions — rejected because it conflates two responsibilities and makes future extraction into separate services harder. A seam between the two domains must be visible now even if the split doesn't happen until Assignment 2.
 
 Consequences: The only coupling is one-way and at the SQL level, from progress into roadmap: `add_log()` issues a cross-table UPDATE to sync the parent item's status, and `weak_skills()` JOINs `roadmap_items` to read skill tags. Everything else is cleanly separated, so a future split would only need to replace those two queries with calls to the roadmap service.
+
+---
+
+## 3. SQLite schema: user-owned rows with cascading foreign keys
+
+Date: 2026-09-30
+
+Status: Decided
+
+Context: Both domains share one SQLite file, and since accounts were added every row has to belong to exactly one user. The relationships (a log belongs to an item, an item belongs to a user) must be enforced without an ORM.
+
+Decision: `roadmap_items.user_id`, `login_events.user_id` and `assessments.user_id` reference `users(id)`, and `progress_logs.item_id` references `roadmap_items(id)`, all with `ON DELETE CASCADE` and `PRAGMA foreign_keys = ON` set once on the singleton connection in `db.py`. Progress rows have no `user_id` of their own: ownership is always reached through the parent item.
+
+Alternatives considered: Also storing `user_id` on `progress_logs` — rejected because two copies of the owner could disagree, and an ownership check on the wrong column would still pass. SQLAlchemy ORM — rejected because it hides the schema behind Python classes; with raw `sqlite3` the whole schema is readable in `init_db()`.
+
+Consequences: Deleting a user or an item removes everything under it in one statement, which is what self-service account deletion relies on. Any progress query that isn't already behind an owner-checked item has to JOIN `roadmap_items` to filter by user, as `weak_skills()` and `total_time_spent()` do.
+
+---
+
+## 4. Testing approach: model layer and pure logic, not routes
+
+Date: 2026-09-30
+
+Status: Decided
+
+Context: The assignment asks for at least 70% coverage on core business logic. The code that can silently go wrong here is the model layer (SQL, ownership checks, status updates, rate limits) and the questionnaire scoring, not the Flask glue that passes form fields through.
+
+Decision: Unit-test every public function in `models/`, `ui/` and `services/assessment.py` against a throwaway SQLite file, including security cases (another user's ids, SQL injection payloads, lockout windows), with a small fake question bank injected in place of the real one. Routes and templates are checked by hand in the browser instead of with unit tests.
+
+Alternatives considered: Route tests with `app.test_client()` for every page — rejected for now because they mostly re-test Flask and Jinja, and each needs a logged-in session, roughly doubling the test code for little extra confidence in the logic. Testing `services/youtube.py` was also left out, because it would mean mocking Google's API rather than testing our own code.
+
+Consequences: 114 tests give 100% line coverage on `models/`, `ui/` and the scoring service (`python -m pytest tests/ --cov=models --cov=ui --cov=services.assessment`). A bug that only lives in a route, such as a wrong redirect, is not caught automatically.
