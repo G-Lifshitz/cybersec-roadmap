@@ -317,3 +317,54 @@ h2.mt { margin-top: 24px; }
 @media (max-width: 860px) {
   .options, .level-scale { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Timeline (home) ────────────────────────────────────────────────────── */
+/* Horizontal: one column per phase, the line runs through the nodes, scrolls sideways on narrow screens. */
+.track { list-style: none; margin: 0 0 28px; padding: 0 0 12px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(196px, 1fr); gap: 16px; overflow-x: auto; scroll-snap-type: x proximity; }
+.phase { scroll-snap-align: start; display: flex; flex-direction: column; min-width: 0; }
+.phase-head { position: relative; padding-top: 36px; margin-bottom: 14px; }
+.phase-head::before { content: ""; position: absolute; top: 10px; left: 11px; right: -16px; height: 2px; background: var(--line); }
+.phase:last-child .phase-head::before { display: none; }
+.phase.done .phase-head::before, .phase.known .phase-head::before { background: var(--accent-strong); }
+.node { position: absolute; top: 0; left: 0; z-index: 1; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); display: grid; place-items: center; color: var(--on-accent); }
+.node .icon { width: 13px; height: 13px; stroke-width: 2.5; }
+.phase.current .node { background: var(--accent-strong); border-color: var(--accent-strong); box-shadow: 0 0 0 5px rgba(91, 80, 70, .14); }
+.phase.done .node, .phase.known .node { background: var(--accent-strong); border-color: var(--accent-strong); }
+.phase-num { font: 500 14px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.phase-name { font: 600 19px/1.25 var(--serif); margin: 2px 0; }
+.phase-weeks { font-size: 14px; color: var(--muted); margin: 0; }
+.phase-card { flex: 1; display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+.phase-card h3 { margin: 0; font-size: 17px; }
+.phase-card p { font-size: 14px; margin: 0; }
+.phase-card .chip { font-size: 12px; padding: 4px 10px; }
+.phase.current .phase-card { border-color: var(--line); box-shadow: 0 1px 3px rgba(29, 27, 38, .06); }
+.phase.locked .phase-card { background: transparent; }
+.phase.known .phase-card, .phase.done .phase-card { opacity: .72; }
+.phase-foot { margin-top: auto; padding-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.phase-meta { font-size: 12px; color: var(--muted); }
+.round-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--text); }
+a.round-btn:hover { background: #cfbb9e; text-decoration: none; }
+.round-btn-muted { background: var(--surface-2); color: var(--muted); }
+
+/* Level menu: <details> + submit buttons, no JavaScript */
+.menu { position: relative; }
+.menu summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 176px; padding: 11px 16px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); font-weight: 500; }
+.menu summary::-webkit-details-marker { display: none; }
+.menu summary .icon { width: 16px; height: 16px; }
+.menu[open] summary { border-color: var(--border-strong); }
+.menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 100%; display: flex; flex-direction: column; background: var(--field); border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; box-shadow: 0 8px 24px rgba(29, 27, 38, .08); }
+.menu-list button { background: none; border: 0; text-align: left; cursor: pointer; padding: 9px 12px; border-radius: 8px; font: 14px var(--sans); color: var(--text-2); }
+.menu-list button:hover, .menu-list button:focus-visible { background: var(--surface-2); outline: none; }
+.menu-list button.on { font-weight: 600; color: var(--text); }
+
+/* Current phase checklist */
+.step-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.step { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: 0; }
+.step-mark { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; color: var(--on-accent); }
+.step.added .step-mark { border-color: var(--blue); }
+.step.done .step-mark { background: var(--green); border-color: var(--green); }
+.step-mark .icon { width: 12px; height: 12px; stroke-width: 2.5; }
+.step-status { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.path-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.page-head .lede a { white-space: nowrap; }

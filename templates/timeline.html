@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ timeline.field_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Roadmap</p>
+    <h1>{{ timeline.field_name }}</h1>
+    <p class="lede">A structured path to learn, practice and build real skills. <a href="{{ url_for('choose_path') }}">Change field</a></p>
+  </div>
+  {# Level switch without JavaScript: <details> opens the menu, each option is a submit button. #}
+  <details class="menu">
+    <summary>{{ timeline.level_label }} {{ icon('chevron') }}</summary>
+    <form method="POST" action="{{ url_for('choose_path') }}" class="menu-list">
+      <input type="hidden" name="field" value="{{ timeline.field }}">
+      {% for value, label in levels %}
+      <button type="submit" name="level" value="{{ value }}"{% if value == timeline.level %} class="on" aria-current="true"{% endif %}>{{ label }}</button>
+      {% endfor %}
+    </form>
+  </details>
+</div>
+
+<ol class="track">
+  {% for p in timeline.phases %}
+  <li class="phase {{ p.state }}">
+    <div class="phase-head">
+      <span class="node">{% if p.state in ('done', 'known') %}{{ icon('check') }}{% endif %}</span>
+      <span class="phase-num">{{ '%02d' % p.number }}</span>
+      <h2 class="phase-name">{{ p.name }}</h2>
+      <p class="phase-weeks">{{ p.duration }}{% if p.state == 'known' %} · covered at your level{% elif p.state == 'done' %} · done{% endif %}</p>
+    </div>
+    <div class="phase-card">
+      <h3>{{ p.title }}</h3>
+      <p class="muted">{{ p.summary }}</p>
+      <div class="chips">{% for t in p.tags %}<span class="chip">{{ t }}</span>{% endfor %}</div>
+      <div class="phase-foot">
+        <span class="phase-meta">{{ p.date_range }}</span>
+        {% if p.state == 'current' %}
+        <a href="#phase-detail" class="round-btn" aria-label="What to do in this phase">{{ icon('arrow') }}</a>
+        {% elif p.state == 'locked' %}
+        <span class="round-btn round-btn-muted" title="Unlocks after the current phase">{{ icon('lock') }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+
+{% set cur = timeline.current %}
+{% if cur %}
+<section class="card" id="phase-detail">
+  <div class="card-head">
+    <div>
+      <p class="eyebrow">Now · Phase {{ '%02d' % cur.number }}</p>
+      <h2>{{ cur.title }}</h2>
+    </div>
+    {% if cur.can_add %}
+    <form method="POST" action="{{ url_for('add_phase', number=cur.number) }}">
+      <button type="submit" class="btn btn-primary">{{ icon('plus') }} Add to my roadmap</button>
+    </form>
+    {% endif %}
+  </div>
+  <ul class="step-list">
+    {% for title, status, label in cur.step_rows %}
+    <li class="step {{ status }}"><span class="step-mark">{% if status == 'done' %}{{ icon('check') }}{% endif %}</span>{{ title }}<span class="step-status">{{ label }}</span></li>
+    {% endfor %}
+  </ul>
+  <p class="muted small-note">{{ cur.done }} of {{ cur.steps | length }} done. The phase is finished when every step is completed on your <a href="{{ url_for('progress') }}">Progress</a> page; then the next one unlocks.</p>
+</section>
+{% else %}
+<div class="empty empty-sm">Every phase is done or covered at your level. Pick the next level up from the menu above.</div>
+{% endif %}
+{% endblock %}

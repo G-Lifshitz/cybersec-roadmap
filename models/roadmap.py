@@ -61,6 +61,35 @@ def create(user_id, title, type_, platform, url, skill_tags, difficulty, priorit
         return cur.lastrowid
 
 
+def create_many(user_id, items):
+    """Add several items at once, skipping any whose title this user already has.
+
+    Titles are compared ignoring case and surrounding spaces, so adding the same
+    timeline phase twice never creates duplicates. Returns how many were created.
+    items: dicts with title, type, platform, url, skill_tags, difficulty, priority.
+    """
+    with get_db() as conn:
+        existing = {
+            row["title"].strip().lower()
+            for row in conn.execute("SELECT title FROM roadmap_items WHERE user_id = ?", (user_id,))
+        }
+        created = 0
+        for item in items:
+            key = item["title"].strip().lower()
+            if key in existing:
+                continue
+            conn.execute(
+                """INSERT INTO roadmap_items
+                   (user_id, title, type, platform, url, skill_tags, difficulty, priority)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (user_id, item["title"].strip(), item["type"], item["platform"], item["url"],
+                 normalise_tags(item["skill_tags"]), item["difficulty"], item["priority"]),
+            )
+            existing.add(key)
+            created += 1
+        return created
+
+
 def update(item_id, user_id, **fields):
     """Update the editable fields of an item. Unknown keys are ignored.
 

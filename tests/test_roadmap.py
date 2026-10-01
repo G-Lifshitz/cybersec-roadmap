@@ -217,3 +217,27 @@ def test_update_cannot_inject_through_column_names():
 def test_split_tags_trims_lowercases_and_drops_empties():
     assert roadmap.split_tags(" Web, NETWORK ,, ") == ["web", "network"]
     assert roadmap.split_tags(None) == []
+
+
+def _rows(*titles):
+    return [{"title": t, "type": "course", "platform": "Other", "url": "",
+             "skill_tags": "Web, web", "difficulty": "beginner", "priority": 4} for t in titles]
+
+
+def test_create_many_adds_items_and_normalises_tags():
+    assert roadmap.create_many(UID, _rows("First", "Second")) == 2
+    items = roadmap.get_all(UID)
+    assert {i["title"] for i in items} == {"First", "Second"}
+    assert items[0]["skill_tags"] == "web"
+
+
+def test_create_many_skips_titles_the_user_already_has():
+    roadmap.create(UID, "First", "course", "Other", "", "", "beginner", 3)
+    assert roadmap.create_many(UID, _rows(" first ", "Second", "SECOND")) == 1
+    assert len(roadmap.get_all(UID)) == 2
+
+
+def test_create_many_ignores_other_users_titles():
+    bob = users.create_user("bob_b", "correct-horse")
+    roadmap.create(bob, "First", "course", "Other", "", "", "beginner", 3)
+    assert roadmap.create_many(UID, _rows("First")) == 1

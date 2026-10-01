@@ -65,9 +65,21 @@ def authenticate(username, password):
 def get_by_id(user_id):
     with get_db() as conn:
         return conn.execute(
-            "SELECT id, username, is_admin, session_epoch, created_at FROM users WHERE id = ?",
+            """SELECT id, username, is_admin, session_epoch, path_field, path_level, created_at
+               FROM users WHERE id = ?""",
             (user_id,),
         ).fetchone()
+
+
+def set_path(user_id, field, level):
+    """Remember which career field and level the user's timeline is built for.
+
+    The caller validates field and level against the catalogue; this only stores them.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET path_field = ?, path_level = ? WHERE id = ?", (field, level, user_id)
+        )
 
 
 # ── Admin ──────────────────────────────────────────────────────────────────

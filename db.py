@@ -60,6 +60,8 @@ def init_db():
                 password_hash TEXT NOT NULL,
                 is_admin      INTEGER NOT NULL DEFAULT 0,
                 session_epoch INTEGER NOT NULL DEFAULT 0,  -- bumped on password change; old cookies stop working
+                path_field    TEXT,      -- chosen career field (key in services/timeline_catalog.py)
+                path_level    TEXT,      -- none | beginner | intermediate | advanced
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -139,6 +141,8 @@ def _migrate(conn):
         ("roadmap_items", "user_id", "INTEGER REFERENCES users(id) ON DELETE CASCADE"),
         ("users", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
         ("users", "session_epoch", "INTEGER NOT NULL DEFAULT 0"),
+        ("users", "path_field", "TEXT"),
+        ("users", "path_level", "TEXT"),
     ]
     # Table/column names here are fixed strings from the list above, never input.
     for table, column, definition in added_columns:
