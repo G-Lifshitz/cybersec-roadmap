@@ -63,3 +63,19 @@ Decision: Unit-test every public function in `models/`, `ui/` and `services/asse
 Alternatives considered: Route tests with `app.test_client()` for every page — rejected for now because they mostly re-test Flask and Jinja, and each needs a logged-in session, roughly doubling the test code for little extra confidence in the logic. Testing `services/youtube.py` was also left out, because it would mean mocking Google's API rather than testing our own code.
 
 Consequences: 114 tests give 100% line coverage on `models/`, `ui/` and the scoring service (`python -m pytest tests/ --cov=models --cov=ui --cov=services.assessment`). A bug that only lives in a route, such as a wrong redirect, is not caught automatically.
+
+---
+
+## 5. Deliberately not built: automatic progress sync with TryHackMe and Hack The Box
+
+Date: 2026-10-01
+
+Status: Decided
+
+Context: Most users already work through labs and courses on TryHackMe and Hack The Box, so pulling their progress from those platforms automatically was the obvious extra feature. Every roadmap item and progress log is currently entered by hand.
+
+Decision: Don't sync with either platform; users add and update their roadmap items and logs themselves. The only external API stays the YouTube Data API v3, and it is optional.
+
+Alternatives considered: Scraping each user's public profile pages — rejected because it breaks whenever a page layout changes and may break the platforms' terms of service. Asking each user for a platform API token and polling with it — rejected because the app would then store third-party credentials for every user, a secrets-management and breach risk far bigger than the convenience is worth.
+
+Consequences: The app stores no third-party credentials and nothing breaks when those platforms change, which also keeps it within the deployment rule of no required external dependencies. The cost is manual data entry for every item and every study session.
