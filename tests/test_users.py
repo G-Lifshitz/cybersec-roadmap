@@ -220,3 +220,11 @@ def test_get_id_by_username():
     uid = users.create_user("Georgy", "s3cure-pass")
     assert users.get_id_by_username("georgy") == uid   # NOCASE
     assert users.get_id_by_username("nobody") is None
+
+
+def test_new_user_has_no_path_until_one_is_set():
+    uid = users.create_user("pathfinder", "s3cure-pass")
+    assert users.get_by_id(uid)["path_field"] is None
+    users.set_path(uid, "soc", "beginner")
+    user = users.get_by_id(uid)
+    assert (user["path_field"], user["path_level"]) == ("soc", "beginner")
