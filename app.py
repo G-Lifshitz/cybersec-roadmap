@@ -15,6 +15,7 @@ import models.users as users_model
 import models.ratelimit as ratelimit
 import models.assessment as assessment_model
 from services.youtube import RecommendationService
+import services.export as export_service
 from services.assessment import LEVEL_LABELS, LEVELS, AssessmentError, Questionnaire
 from services.question_bank import FIELDS as QUESTION_BANK
 from services.timelines import TimelinePlanner
@@ -568,6 +569,20 @@ def delete_account():
     session.clear()
     flash("Your account and all your data have been deleted.")
     return redirect(url_for("login"))
+
+
+@app.route("/settings/export/<name>")
+@login_required
+def export_data(name):
+    """Download everything stored about the logged-in user (GDPR access / portability)."""
+    if name not in export_service.FORMATS:
+        abort(404)
+    build, content_type = export_service.FORMATS[name]
+    response = app.make_response(build(export_service.collect(g.user["id"])))
+    response.headers["Content-Type"] = f"{content_type}; charset=utf-8"
+    response.headers["Content-Disposition"] = f'attachment; filename="cyberroadmap-{date.today()}-{name}"'
+    response.headers["Cache-Control"] = "no-store"  # personal data: don't keep it in browser or proxy caches
+    return response
 
 
 # ── Admin ──────────────────────────────────────────────────────────────────

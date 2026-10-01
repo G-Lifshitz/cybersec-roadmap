@@ -48,6 +48,16 @@
     </form>
   </section>
 
+  <section class="card">
+    <h2>Your data</h2>
+    <p class="muted">Download everything this app stores about you: account, roadmap items, logged sessions, assessment results and sign-in history.</p>
+    <div class="head-actions export-links">
+      <a href="{{ url_for('export_data', name='data.json') }}" class="btn btn-ghost">Everything (JSON)</a>
+      <a href="{{ url_for('export_data', name='items.csv') }}" class="btn btn-ghost">Items (CSV)</a>
+      <a href="{{ url_for('export_data', name='logs.csv') }}" class="btn btn-ghost">Sessions (CSV)</a>
+    </div>
+  </section>
+
   <section class="card card-danger">
     <h2>Delete account</h2>
     <p class="muted">Permanently deletes your account, every roadmap item, every logged session and your sign-in history. This can't be undone.</p>

@@ -182,6 +182,24 @@ def delete_account(user_id, password):
 
 # ── Login history ──────────────────────────────────────────────────────────
 
+def export_account(user_id):
+    """Account details for the data export. password_hash and session_epoch are left out on purpose."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT username, is_admin, created_at FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def all_logins(user_id):
+    """Every sign-in event for this user, oldest first (used by the data export)."""
+    with get_db() as conn:
+        return conn.execute(
+            "SELECT success, ip, created_at FROM login_events WHERE user_id = ? ORDER BY id",
+            (user_id,),
+        ).fetchall()
+
+
 def get_id_by_username(username):
     with get_db() as conn:
         row = conn.execute(

@@ -368,3 +368,6 @@ a.round-btn:hover { background: #cfbb9e; text-decoration: none; }
 .step-status { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .path-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
 .page-head .lede a { white-space: nowrap; }
+
+/* ── Data export ────────────────────────────────────────────────────────── */
+.export-links { flex-wrap: wrap; margin-top: 12px; }

@@ -89,3 +89,20 @@ def total_time_spent(user_id):
             (user_id,),
         ).fetchone()
     return row["total"] or 0
+
+
+def logs_for_user(user_id):
+    """Every log on this user's items, oldest first, with the item title (used by the data export).
+
+    Logs have no user_id of their own, so ownership comes through the JOIN (ADR 3).
+    """
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT pl.id, pl.item_id, ri.title AS item_title, pl.checked_in_at,
+                      pl.completion_pct, pl.felt_difficulty, pl.notes, pl.time_spent_mins
+               FROM progress_logs pl
+               JOIN roadmap_items ri ON ri.id = pl.item_id
+               WHERE ri.user_id = ?
+               ORDER BY pl.id""",
+            (user_id,),
+        ).fetchall()
