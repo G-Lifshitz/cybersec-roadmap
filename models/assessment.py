@@ -41,3 +41,14 @@ def history(user_id, limit=10):
                ORDER BY id DESC LIMIT ?""",
             (user_id, limit),
         ).fetchall()
+
+
+def all_for_user(user_id):
+    """Every attempt with answers decoded, oldest first (used by the data export)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, field, answers, score, max_score, level, taken_at
+               FROM assessments WHERE user_id = ? ORDER BY id""",
+            (user_id,),
+        ).fetchall()
+    return [{**dict(row), "answers": json.loads(row["answers"])} for row in rows]
