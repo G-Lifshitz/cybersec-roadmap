@@ -30,6 +30,7 @@
     </div>
   </div>
   <div class="form-actions">
+    {% if current %}<a href="{{ url_for('index') }}" class="btn btn-ghost">Cancel</a>{% endif %}
     <button type="submit" class="btn btn-primary">Build my timeline</button>
   </div>
 </form>

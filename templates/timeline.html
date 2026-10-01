@@ -5,9 +5,19 @@
   <div>
     <p class="eyebrow">Roadmap</p>
     <h1>{{ timeline.field_name }}</h1>
-    <p class="lede">A structured path to learn, practice and build real skills. <a href="{{ url_for('choose_path') }}">Change field</a></p>
+    <p class="lede">A structured path to learn, practice and build real skills.</p>
   </div>
-  {# Level switch without JavaScript: <details> opens the menu, each option is a submit button. #}
+  {# Field and level switches without JavaScript: <details> opens a menu, each option is a submit button. #}
+  <div class="head-menus">
+  <details class="menu menu-wide">
+    <summary>Change field {{ icon('chevron') }}</summary>
+    <form method="POST" action="{{ url_for('choose_path') }}" class="menu-list">
+      <input type="hidden" name="level" value="{{ timeline.level }}">
+      {% for key, name in fields %}
+      <button type="submit" name="field" value="{{ key }}"{% if key == timeline.field %} class="on" aria-current="true"{% endif %}>{{ name }}</button>
+      {% endfor %}
+    </form>
+  </details>
   <details class="menu">
     <summary>{{ timeline.level_label }} {{ icon('chevron') }}</summary>
     <form method="POST" action="{{ url_for('choose_path') }}" class="menu-list">
@@ -17,6 +27,7 @@
       {% endfor %}
     </form>
   </details>
+  </div>
 </div>
 
 <ol class="track">

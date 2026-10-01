@@ -274,7 +274,7 @@ def index():
         return render_template("path.html", fields=_planner.fields(), levels=LEVEL_CHOICES, current=None)
     field, level = path
     timeline = _planner.plan(field, level, roadmap_model.get_all(g.user["id"]), date.today())
-    return render_template("timeline.html", timeline=timeline, levels=LEVEL_CHOICES)
+    return render_template("timeline.html", timeline=timeline, levels=LEVEL_CHOICES, fields=_planner.fields())
 
 
 @app.route("/path", methods=["GET", "POST"])
