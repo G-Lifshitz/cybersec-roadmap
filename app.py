@@ -1,5 +1,6 @@
 import os
 import secrets
+from datetime import date
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort
@@ -14,8 +15,10 @@ import models.users as users_model
 import models.ratelimit as ratelimit
 import models.assessment as assessment_model
 from services.youtube import RecommendationService
-from services.assessment import AssessmentError, Questionnaire
+from services.assessment import LEVEL_LABELS, LEVELS, AssessmentError, Questionnaire
 from services.question_bank import FIELDS as QUESTION_BANK
+from services.timelines import TimelinePlanner
+from services.timeline_catalog import TRACKS as TIMELINE_CATALOGUE
 from ui.icons import icon
 from ui.navigation import links_for
 
@@ -56,6 +59,9 @@ FELT_DIFFICULTIES = ["easy", "fair", "hard", "brutal"]
 _rec = RecommendationService()
 # The question bank is injected here, so the scoring code never imports the data itself
 _quiz = Questionnaire(QUESTION_BANK)
+# Same idea for the timeline: the phases are data, injected into the planner here
+_planner = TimelinePlanner(TIMELINE_CATALOGUE)
+LEVEL_CHOICES = [(level, LEVEL_LABELS[level]) for level in LEVELS]
 
 # Template helpers: {{ icon('book') }} and {% for t in item.skill_tags | tags %}
 app.add_template_global(icon)
@@ -209,9 +215,9 @@ def logout():
 
 # ── Dashboard ──────────────────────────────────────────────────────────────
 
-@app.route("/")
+@app.route("/progress")
 @login_required
-def index():
+def progress():
     uid = g.user["id"]
     filters = {
         "status": request.args.get("status") or None,
@@ -233,7 +239,7 @@ def index():
         })
 
     return render_template(
-        "index.html",
+        "progress.html",
         items=enriched,
         skill_summary=skill_summary,
         weak_skills=weak,
@@ -245,6 +251,61 @@ def index():
         filters=filters,
         filtering=any(filters.values()),
     )
+
+
+# ── Timeline (home page) ───────────────────────────────────────────────────
+
+def _current_path(user):
+    """(field, level) the timeline is built for: the saved choice, else the latest assessment, else None."""
+    if _planner.is_valid(user["path_field"], user["path_level"]):
+        return user["path_field"], user["path_level"]
+    latest = assessment_model.history(user["id"], limit=1)
+    if latest and _planner.is_valid(latest[0]["field"], latest[0]["level"]):
+        return latest[0]["field"], latest[0]["level"]
+    return None
+
+
+@app.route("/")
+@login_required
+def index():
+    path = _current_path(g.user)
+    if path is None:
+        return render_template("path.html", fields=_planner.fields(), levels=LEVEL_CHOICES, current=None)
+    field, level = path
+    timeline = _planner.plan(field, level, roadmap_model.get_all(g.user["id"]), date.today())
+    return render_template("timeline.html", timeline=timeline, levels=LEVEL_CHOICES)
+
+
+@app.route("/path", methods=["GET", "POST"])
+@login_required
+def choose_path():
+    if request.method == "POST":
+        field, level = request.form.get("field", ""), request.form.get("level", "")
+        if not _planner.is_valid(field, level):
+            flash("Pick a field and a level from the list.")
+            return redirect(url_for("choose_path"))
+        users_model.set_path(g.user["id"], field, level)
+        return redirect(url_for("index"))
+    return render_template("path.html", fields=_planner.fields(), levels=LEVEL_CHOICES,
+                           current=_current_path(g.user))
+
+
+@app.route("/timeline/phase/<int:number>/add", methods=["POST"])
+@login_required
+def add_phase(number):
+    path = _current_path(g.user)
+    if path is None:
+        return redirect(url_for("index"))
+    try:
+        items = _planner.items_for_phase(path[0], number)
+    except IndexError:
+        abort(404)
+    added = roadmap_model.create_many(g.user["id"], items)
+    if added:
+        flash(f"Added {added} item{'s' if added != 1 else ''} to your roadmap.")
+    else:
+        flash("Everything in this phase is already on your roadmap.")
+    return redirect(url_for("index"))
 
 
 # ── Roadmap items ──────────────────────────────────────────────────────────
@@ -294,7 +355,7 @@ def add_item():
             priority=data["priority"],
         )
         flash(f'"{data["title"]}" added to your roadmap.')
-        return redirect(url_for("index"))
+        return redirect(url_for("progress"))
 
     return render_template("add.html", item={}, **_form_choices())
 
@@ -305,7 +366,7 @@ def edit_item(item_id):
     item = roadmap_model.get_by_id(item_id, g.user["id"])
     if not item:
         flash("Item not found.")
-        return redirect(url_for("index"))
+        return redirect(url_for("progress"))
 
     if request.method == "POST":
         data = _item_form_data()
@@ -327,7 +388,7 @@ def item_detail(item_id):
     item = roadmap_model.get_by_id(item_id, g.user["id"])
     if not item:
         flash("Item not found.")
-        return redirect(url_for("index"))
+        return redirect(url_for("progress"))
 
     logs = progress_model.get_logs_for_item(item_id)
     completion = progress_model.latest_completion(item_id)
@@ -351,7 +412,7 @@ def log_progress(item_id):
     item = roadmap_model.get_by_id(item_id, g.user["id"])
     if not item:
         flash("Item not found.")
-        return redirect(url_for("index"))
+        return redirect(url_for("progress"))
 
     try:
         pct = max(0, min(100, int(request.form.get("completion_pct", 0))))
@@ -378,7 +439,7 @@ def delete_item(item_id):
         flash("Item removed.")
     else:
         flash("Item not found.")
-    return redirect(url_for("index"))
+    return redirect(url_for("progress"))
 
 
 # ── Recommendations ────────────────────────────────────────────────────────
@@ -424,6 +485,8 @@ def take_assessment(field):
         attempt_id = assessment_model.save(
             g.user["id"], field, result.answers, result.score, result.max_score, result.level
         )
+        if _planner.is_valid(field, result.level):
+            users_model.set_path(g.user["id"], field, result.level)  # the timeline follows the latest result
         return redirect(url_for("assessment_result", attempt_id=attempt_id))
     return render_template("quiz.html", field_key=field, field=questions, chosen={})
 
