@@ -16,6 +16,7 @@ _PATHS = {
     "lock": '<rect x="6" y="10.5" width="12" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
     "compass": '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
     "chevron": '<path d="M6 9l6 6 6-6"/>',
+    "calendar": '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 }
 
