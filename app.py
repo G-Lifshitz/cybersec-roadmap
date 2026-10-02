@@ -1,6 +1,6 @@
 import os
 import secrets
-from datetime import date
+from datetime import date, datetime, timezone
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g, abort
@@ -15,6 +15,7 @@ import models.users as users_model
 import models.ratelimit as ratelimit
 import models.assessment as assessment_model
 from services.youtube import RecommendationService
+import services.stats as stats_service
 import services.export as export_service
 from services.assessment import LEVEL_LABELS, LEVELS, AssessmentError, Questionnaire
 from services.question_bank import FIELDS as QUESTION_BANK
@@ -67,6 +68,7 @@ LEVEL_CHOICES = [(level, LEVEL_LABELS[level]) for level in LEVELS]
 # Template helpers: {{ icon('book') }} and {% for t in item.skill_tags | tags %}
 app.add_template_global(icon)
 app.add_template_filter(roadmap_model.split_tags, "tags")
+app.add_template_filter(stats_service.duration, "duration")   # 90 -> "1h 30m"
 
 
 @app.context_processor
@@ -456,6 +458,18 @@ def recommendations():
         videos=videos,
         subscriptions=subs,
     )
+
+
+# ── Stats ──────────────────────────────────────────────────────────────────
+
+@app.route("/stats")
+@login_required
+def stats():
+    # Logs are stamped in UTC, so "today" is the UTC date too.
+    today = datetime.now(timezone.utc).date()
+    year, month = stats_service.parse_month(request.args.get("month"), today)
+    entries = stats_service.to_entries(progress_model.time_entries(g.user["id"]))
+    return render_template("stats.html", report=stats_service.build_report(entries, today, year, month))
 
 
 # ── Career assessment ──────────────────────────────────────────────────────

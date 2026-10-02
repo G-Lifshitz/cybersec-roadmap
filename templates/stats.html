@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Stats</p>
+    <h1>Your study</h1>
+    <p class="lede">When you study, how much, and on what. Built from the sessions you log.</p>
+  </div>
+</div>
+
+<section class="stats">
+  <div class="stat"><span class="stat-value">{{ report.total_hours }}<small>h</small></span><span class="stat-label">studied in total</span></div>
+  <div class="stat"><span class="stat-value">{{ report.sessions }}</span><span class="stat-label">sessions on {{ report.days_studied }} day{{ '' if report.days_studied == 1 else 's' }}</span></div>
+  <div class="stat"><span class="stat-value accent-green">{{ report.current_streak }}<small>d</small></span><span class="stat-label">current streak</span></div>
+  <div class="stat"><span class="stat-value">{{ report.longest_streak }}<small>d</small></span><span class="stat-label">longest streak</span></div>
+</section>
+
+{% if not report.sessions %}
+<div class="empty empty-sm">Nothing logged yet. Open an item on your <a href="{{ url_for('progress') }}">Progress</a> page and log a session; it shows up here straight away.</div>
+{% endif %}
+
+<div class="detail-grid stats-grid">
+  <section class="card">
+    <div class="card-head">
+      <a href="{{ url_for('stats', month=report.prev_month) }}" class="btn btn-ghost btn-sm" aria-label="Previous month">&larr;</a>
+      <h2>{{ report.month_label }}</h2>
+      {% if report.next_month %}
+      <a href="{{ url_for('stats', month=report.next_month) }}" class="btn btn-ghost btn-sm" aria-label="Next month">&rarr;</a>
+      {% else %}
+      <span class="btn btn-sm cal-spacer" aria-hidden="true">&rarr;</span>
+      {% endif %}
+    </div>
+    <table class="cal">
+      <thead><tr>{% for name in report.weekdays %}<th scope="col">{{ name }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for week in report.month_grid %}
+        <tr>
+          {% for d in week %}
+          <td class="cal-day shade-{{ d.shade }}{% if not d.in_month %} out{% endif %}{% if d.is_today %} today{% endif %}" title="{{ d.title }}">{{ d.day.day }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="cal-legend" aria-hidden="true"><span>Less</span>{% for n in range(5) %}<i class="shade-{{ n }}"></i>{% endfor %}<span>More</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Time per skill</h2>
+    {% if report.skills %}
+    <ul class="hbars">
+      {% for tag, minutes, pct in report.skills %}
+      <li><span class="hbar-label">{{ tag }}</span><span class="hbar"><span style="width: {{ pct }}%"></span></span><span class="hbar-value">{{ minutes | duration }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Log time on items with skill tags to see where it goes.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Last 12 weeks</h2>
+  {# Drawn on the server: every coordinate comes from services/stats.py, no JavaScript. #}
+  <svg class="weekly" viewBox="0 0 900 185" role="img" aria-label="Minutes studied per week, last 12 weeks">
+    <line class="baseline" x1="0" y1="150.5" x2="900" y2="150.5"></line>
+    {% for b in report.weekly %}
+    <g>
+      <title>Week of {{ b.label }}: {{ b.value | duration }}</title>
+      <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}" rx="3"></rect>
+      <text x="{{ b.center }}" y="170" text-anchor="middle">{{ b.label }}</text>
+    </g>
+    {% endfor %}
+  </svg>
+</section>
+{% endblock %}

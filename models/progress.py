@@ -106,3 +106,22 @@ def logs_for_user(user_id):
                ORDER BY pl.id""",
             (user_id,),
         ).fetchall()
+
+
+def time_entries(user_id):
+    """(day, minutes, skill_tags) for every log on this user's items, for the stats page.
+
+    day is the UTC date the log was saved; a log without a time counts as 0 minutes.
+    Ownership comes through the JOIN, like every other progress query (ADR 3).
+    """
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT date(pl.checked_in_at) AS day,
+                      COALESCE(pl.time_spent_mins, 0) AS minutes,
+                      ri.skill_tags
+               FROM progress_logs pl
+               JOIN roadmap_items ri ON ri.id = pl.item_id
+               WHERE ri.user_id = ?
+               ORDER BY pl.id""",
+            (user_id,),
+        ).fetchall()
