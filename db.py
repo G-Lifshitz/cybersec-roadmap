@@ -66,6 +66,7 @@ def init_db():
                 session_epoch INTEGER NOT NULL DEFAULT 0,  -- bumped on password change; old cookies stop working
                 path_field    TEXT,      -- chosen career field (key in services/timeline_catalog.py)
                 path_level    TEXT,      -- none | beginner | intermediate | advanced
+                github_username TEXT,    -- linked public GitHub profile (no token stored)
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -147,6 +148,7 @@ def _migrate(conn):
         ("users", "session_epoch", "INTEGER NOT NULL DEFAULT 0"),
         ("users", "path_field", "TEXT"),
         ("users", "path_level", "TEXT"),
+        ("users", "github_username", "TEXT"),
     ]
     # Table/column names here are fixed strings from the list above, never input.
     for table, column, definition in added_columns:
