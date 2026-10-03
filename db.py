@@ -9,11 +9,15 @@ class _DatabaseManager:
     Singleton that owns the SQLite connection for this process.
 
     Pattern: Singleton (Creational)
-    Ensures only one connection object is ever created, giving every caller the
-    same handle and eliminating repeated connect/close overhead.  Safe for our
-    use-case: single-user Flask app, single process, single thread per request
-    (Werkzeug dev server default).  check_same_thread=False lets the connection
-    be handed to request threads without SQLite raising an error.
+    Only one connection object is ever created, so every caller shares the same
+    handle and there is no connect/close overhead per query. The app has many
+    users but runs as one process, and Werkzeug serves each request in a
+    thread; check_same_thread=False lets those threads use the connection.
+
+    Trade-off: every request shares this one connection, so transactions from
+    requests that overlap in time are not isolated from each other. That is
+    fine at this app's scale; under real concurrent load the next step would
+    be one connection per request (stored on Flask's g).
     """
 
     _instance = None
