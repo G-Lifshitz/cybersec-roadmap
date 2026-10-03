@@ -17,6 +17,7 @@ _PATHS = {
     "compass": '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
     "chevron": '<path d="M6 9l6 6 6-6"/>',
     "calendar": '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    "code": '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4.5l-3 15"/>',
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 }
 

@@ -405,3 +405,15 @@ a.round-btn:hover { background: #cfbb9e; text-decoration: none; }
   .hbars li { grid-template-columns: 100px 1fr 56px; }
   .weekly text { display: none; }   /* too small to read on a phone; each bar keeps its tooltip */
 }
+
+/* ── Projects (GitHub) ──────────────────────────────────────────────────── */
+.stats-3 { grid-template-columns: repeat(3, 1fr); }
+.repo-row { cursor: default; }
+.repo-row:hover { background: var(--surface); }
+.repo-row .item-title a { color: var(--text); }
+.repo-desc { font-size: 14px; color: var(--muted); margin: -2px 0 8px; }
+.repo-row .btn .icon { width: 14px; height: 14px; }
+@media (max-width: 860px) {
+  .stats-3 { grid-template-columns: 1fr 1fr; }
+  .stats-3 .stat:last-child { grid-column: span 2; }
+}

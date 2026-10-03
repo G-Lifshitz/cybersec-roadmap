@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Projects</p>
+    <h1>Your GitHub projects</h1>
+    {% if profile %}
+    <p class="lede">Public activity for <a href="{{ profile.url }}" target="_blank" rel="noopener noreferrer">@{{ profile.username }}</a>. Add a repository to your roadmap to log progress on it.</p>
+    {% else %}
+    <p class="lede">Link your GitHub profile to see your repositories and recent activity next to your roadmap.</p>
+    {% endif %}
+  </div>
+  {% if profile %}
+  <form method="POST" action="{{ url_for('unlink_github') }}">
+    <button type="submit" class="btn btn-ghost btn-sm">Unlink GitHub</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if not profile %}
+<section class="card form-page">
+  <h2>Link your GitHub profile</h2>
+  <form method="POST" action="{{ url_for('link_github') }}">
+    <div class="field">
+      <label for="github_username">GitHub username</label>
+      <input id="github_username" type="text" name="github_username" required maxlength="100" placeholder="octocat or https://github.com/octocat" autocomplete="off">
+    </div>
+    <p class="muted small-note">Only public information is read: your public repositories and recent pushes. No GitHub password or token is ever asked for or stored, and you can unlink at any time.</p>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Link profile</button></div>
+  </form>
+</section>
+{% else %}
+
+{% if not profile.available %}
+<div class="callout"><span class="callout-icon">!</span>
+  <div>Couldn't load <strong>@{{ profile.username }}</strong> from GitHub right now. The profile may not exist, or GitHub may be busy. Try again in a few minutes.</div>
+</div>
+{% else %}
+<section class="stats stats-3">
+  <div class="stat"><span class="stat-value">{{ profile.pushes }}</span><span class="stat-label">pushes in the last 30 days</span></div>
+  <div class="stat"><span class="stat-value accent-green">{{ profile.active_days }}</span><span class="stat-label">days with a push</span></div>
+  <div class="stat"><span class="stat-value">{{ repos | length }}</span><span class="stat-label">recent public repositories</span></div>
+</section>
+
+{% if repos %}
+<div class="item-list">
+  {% for repo, added in repos %}
+  <div class="item-row repo-row">
+    <div class="item-main">
+      <div class="item-title"><a href="{{ repo.url }}" target="_blank" rel="noopener noreferrer">{{ repo.name }}</a>{% if repo.fork %} <span class="pill">fork</span>{% endif %}</div>
+      {% if repo.description %}<p class="repo-desc">{{ repo.description }}</p>{% endif %}
+      <div class="item-sub">
+        {% if repo.language %}<span class="pill pill-type">{{ repo.language }}</span>{% endif %}
+        <span class="mini-tag">★ {{ repo.stars }}</span>
+        {% if repo.pushed_label %}<span class="mini-tag">last push {{ repo.pushed_label }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="item-side">
+      {% if added %}
+      <span class="pill s-pill-completed">on your roadmap</span>
+      {% else %}
+      <form method="POST" action="{{ url_for('add_repo_to_roadmap') }}">
+        <input type="hidden" name="repo" value="{{ repo.name }}">
+        <button type="submit" class="btn btn-ghost btn-sm">{{ icon('plus') }} Add to roadmap</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty empty-sm">No public repositories yet.</div>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}
