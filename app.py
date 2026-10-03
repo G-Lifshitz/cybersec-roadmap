@@ -16,6 +16,7 @@ import models.ratelimit as ratelimit
 import models.assessment as assessment_model
 from services.youtube import RecommendationService
 import services.stats as stats_service
+from services.github import GitHubService, parse_username
 import services.export as export_service
 from services.assessment import LEVEL_LABELS, LEVELS, AssessmentError, Questionnaire
 from services.question_bank import FIELDS as QUESTION_BANK
@@ -52,13 +53,14 @@ MAX_LEN = {"title": 200, "url": 500, "skill_tags": 200, "notes": 2000, "platform
 PORT = int(os.environ.get("PORT", 5000))
 
 ITEM_TYPES = ["course", "cert", "lab", "book", "project"]
-PLATFORMS = ["HTB", "THM", "YouTube", "Coursera", "OffSec", "TCM", "Other"]
+PLATFORMS = ["HTB", "THM", "YouTube", "Coursera", "OffSec", "TCM", "GitHub", "Other"]
 DIFFICULTIES = ["beginner", "intermediate", "advanced"]
 STATUSES = ["not_started", "in_progress", "completed"]
 FELT_DIFFICULTIES = ["easy", "fair", "hard", "brutal"]
 
 # Single Facade instance — all routes call through it
 _rec = RecommendationService()
+_github = GitHubService()   # Facade over GitHub's public API (read-only, no token)
 # The question bank is injected here, so the scoring code never imports the data itself
 _quiz = Questionnaire(QUESTION_BANK)
 # Same idea for the timeline: the phases are data, injected into the planner here
@@ -470,6 +472,61 @@ def stats():
     year, month = stats_service.parse_month(request.args.get("month"), today)
     entries = stats_service.to_entries(progress_model.time_entries(g.user["id"]))
     return render_template("stats.html", report=stats_service.build_report(entries, today, year, month))
+
+
+# ── Projects (linked GitHub profile) ───────────────────────────────────────
+
+@app.route("/projects")
+@login_required
+def projects():
+    username = g.user["github_username"]
+    if not username:
+        return render_template("projects.html", profile=None, repos=[])
+    profile = _github.profile(username)
+    on_roadmap = {item["title"].strip().lower() for item in roadmap_model.get_all(g.user["id"])}
+    repos = [(repo, repo.name.lower() in on_roadmap) for repo in profile.repos]
+    return render_template("projects.html", profile=profile, repos=repos)
+
+
+@app.route("/projects/link", methods=["POST"])
+@login_required
+def link_github():
+    username = parse_username(request.form.get("github_username", ""))
+    if username is None:
+        flash("That isn't a valid GitHub username.")
+    else:
+        users_model.set_github_username(g.user["id"], username)
+        flash(f"Linked GitHub profile @{username}.")
+    return redirect(url_for("projects"))
+
+
+@app.route("/projects/unlink", methods=["POST"])
+@login_required
+def unlink_github():
+    _github.forget(g.user["github_username"])
+    users_model.set_github_username(g.user["id"], None)
+    flash("GitHub profile unlinked.")
+    return redirect(url_for("projects"))
+
+
+@app.route("/projects/add", methods=["POST"])
+@login_required
+def add_repo_to_roadmap():
+    username = g.user["github_username"]
+    if not username:
+        return redirect(url_for("projects"))
+    # Look the repo up in what GitHub returned; never trust a URL or language from the form.
+    name = request.form.get("repo", "")
+    repo = next((r for r in _github.profile(username).repos if r.name == name), None)
+    if repo is None:
+        flash("Repository not found on your profile.")
+        return redirect(url_for("projects"))
+    added = roadmap_model.create_many(g.user["id"], [{
+        "title": repo.name, "type": "project", "platform": "GitHub", "url": repo.url,
+        "skill_tags": repo.language.lower(), "difficulty": "intermediate", "priority": 3,
+    }])
+    flash(f'"{repo.name}" added to your roadmap.' if added else f'"{repo.name}" is already on your roadmap.')
+    return redirect(url_for("projects"))
 
 
 # ── Career assessment ──────────────────────────────────────────────────────

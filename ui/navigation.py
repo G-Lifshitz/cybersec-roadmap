@@ -14,6 +14,7 @@ MAIN_LINKS = (
     NavLink("index", "Roadmap", "book", ("index", "choose_path")),
     NavLink("progress", "Progress", "chart", ("progress", "item_detail", "edit_item", "add_item")),
     NavLink("stats", "Stats", "calendar", ("stats",)),
+    NavLink("projects", "Projects", "code", ("projects",)),
     NavLink("assessment", "Assessment", "compass", ("assessment", "take_assessment", "assessment_result")),
     NavLink("recommendations", "Resources", "file", ("recommendations",)),
     NavLink("settings", "Profile", "user", ("settings", "change_password", "delete_account")),

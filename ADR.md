@@ -74,7 +74,7 @@ Status: Decided
 
 Context: Most users already work through labs and courses on TryHackMe and Hack The Box, so pulling their progress from those platforms automatically was the obvious extra feature. Every roadmap item and progress log is currently entered by hand.
 
-Decision: Don't sync with either platform; users add and update their roadmap items and logs themselves. The only external API stays the YouTube Data API v3, and it is optional.
+Decision: Don't sync with either platform; users add and update their roadmap items and logs themselves. External APIs stay optional and need no per-user credentials: the YouTube Data API v3 and, since 3 Oct, GitHub's public REST API for linked profiles, read-only.
 
 Alternatives considered: Scraping each user's public profile pages — rejected because it breaks whenever a page layout changes and may break the platforms' terms of service. Asking each user for a platform API token and polling with it — rejected because the app would then store third-party credentials for every user, a secrets-management and breach risk far bigger than the convenience is worth.
 

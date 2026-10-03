@@ -228,3 +228,15 @@ def test_new_user_has_no_path_until_one_is_set():
     users.set_path(uid, "soc", "beginner")
     user = users.get_by_id(uid)
     assert (user["path_field"], user["path_level"]) == ("soc", "beginner")
+
+
+def test_link_and_unlink_github_profile():
+    uid = users.create_user("octo", "s3cure-pass")
+    other = users.create_user("bystander", "s3cure-pass")
+    assert users.get_by_id(uid)["github_username"] is None
+    users.set_github_username(uid, "octocat")
+    assert users.get_by_id(uid)["github_username"] == "octocat"
+    assert users.get_by_id(other)["github_username"] is None    # only that user's row changes
+    assert users.export_account(uid)["github_username"] == "octocat"
+    users.set_github_username(uid, None)
+    assert users.get_by_id(uid)["github_username"] is None

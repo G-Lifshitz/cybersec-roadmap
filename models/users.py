@@ -65,10 +65,16 @@ def authenticate(username, password):
 def get_by_id(user_id):
     with get_db() as conn:
         return conn.execute(
-            """SELECT id, username, is_admin, session_epoch, path_field, path_level, created_at
+            """SELECT id, username, is_admin, session_epoch, path_field, path_level, github_username, created_at
                FROM users WHERE id = ?""",
             (user_id,),
         ).fetchone()
+
+
+def set_github_username(user_id, github_username):
+    """Link (or with None, unlink) a public GitHub profile. The caller validates the name."""
+    with get_db() as conn:
+        conn.execute("UPDATE users SET github_username = ? WHERE id = ?", (github_username, user_id))
 
 
 def set_path(user_id, field, level):
@@ -186,7 +192,7 @@ def export_account(user_id):
     """Account details for the data export. password_hash and session_epoch are left out on purpose."""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT username, is_admin, created_at FROM users WHERE id = ?", (user_id,)
+            "SELECT username, is_admin, github_username, created_at FROM users WHERE id = ?", (user_id,)
         ).fetchone()
     return dict(row) if row else None
 
