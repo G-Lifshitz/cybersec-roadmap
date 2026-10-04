@@ -31,6 +31,9 @@ class _DatabaseManager:
     def connection(self):
         """Return the shared connection, creating it on first call."""
         if self._conn is None:
+            # A DATA_DIR that doesn't exist yet (e.g. a fresh volume) is created,
+            # so the first start never fails with "unable to open database file".
+            os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
             self._conn = sqlite3.connect(DB_PATH, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA foreign_keys = ON")

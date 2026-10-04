@@ -41,7 +41,7 @@ All configuration comes from environment variables (or a `.env` file, loaded wit
 |---|---|---|
 | `PORT` | `5000` | Port the server listens on (always bound to `0.0.0.0`). |
 | `SECRET_KEY` | random per start | Signs the session cookie. Set it to a long random string, otherwise every restart logs everyone out. |
-| `DATA_DIR` | `.` | Folder that holds `roadmap.db`. Point it at a persistent volume when deployed. |
+| `DATA_DIR` | `.` | Folder that holds `roadmap.db`; created at startup if it doesn't exist. Point it at a persistent volume when deployed. |
 | `YOUTUBE_API_KEY` | *(empty)* | YouTube Data API v3 key. Optional: without it the app works and the video sections are simply empty. |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | *(empty)* | If both are set, that account is created (or promoted) as admin at startup. Leave empty for no admin. |
 | `FLASK_DEBUG` | `0` | `1` turns on Flask debug mode. Never in production. |
