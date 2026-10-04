@@ -58,6 +58,8 @@ PORT=8080 DATA_DIR=/data SECRET_KEY=<long-random-string> python app.py
 python -m pytest tests/ --cov=models --cov=ui --cov=services.assessment --cov=services.timelines --cov=services.export --cov=services.stats --cov=services.github --cov-report=term-missing
 ```
 
+Plain `pytest` works too: `pytest.ini` puts the project root on the import path.
+
 Current result: **273 tests passing, 100% line coverage** on `models/`, `ui/` and the five logic services. Tests run against a throwaway SQLite file and include security cases: another user's ids, SQL injection payloads, lockout windows, CSV formula injection, hostile GitHub usernames and links. `GitHubService` receives its HTTP call and clock as parameters, so it is tested with canned responses and never touches the network. Routes and templates are checked by hand, and `services/youtube.py` is not unit-tested because that would mean mocking Google's API (see ADR 4).
 
 ## Project structure
