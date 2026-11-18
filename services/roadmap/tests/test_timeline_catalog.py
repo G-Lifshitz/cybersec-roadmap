@@ -4,10 +4,10 @@ Checks structure only (counts, allowed values, ordering), never the wording.
 """
 from datetime import date
 
-from services.assessment import LEVELS
-from services.question_bank import FIELDS
-from services.timeline_catalog import TRACKS
-from services.timelines import TimelinePlanner
+from domain.assessment import LEVELS
+from domain.question_bank import FIELDS
+from domain.timeline_catalog import TRACKS
+from domain.timelines import TimelinePlanner
 
 PHASE_LEVELS = ("beginner", "intermediate", "advanced")
 # Must match ITEM_TYPES / PLATFORMS in app.py, because steps become roadmap items.

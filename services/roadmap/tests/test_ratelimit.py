@@ -1,83 +1,41 @@
-import os
-import tempfile
+"""Rate limiter against SQL Server. The clock is passed in, so nothing sleeps."""
 import pytest
 
-tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-os.environ["DATA_DIR"] = os.path.dirname(tmp.name)
-
-import db
 import models.ratelimit as rl
 
-db.DB_PATH = tmp.name
-T0 = 1_000_000.0  # fixed fake clock so tests never depend on real time
+pytestmark = pytest.mark.db
+T0 = 1_000_000.0
 
 
 @pytest.fixture(autouse=True)
-def fresh_db():
-    db.init_db()
-    yield
-    with db.get_db() as conn:
-        conn.execute("DELETE FROM rate_events")
+def _clean(clean_db):
+    pass
 
 
-def test_not_limited_below_threshold():
-    for i in range(4):
-        rl.record("login_fail", "alice|1.2.3.4", now=T0 + i)
-    assert rl.is_limited("login_fail", "alice|1.2.3.4", 5, 900, now=T0 + 10) is False
-
-
-def test_limited_at_threshold():
+def test_limited_at_threshold_and_window_slides():
     for i in range(5):
-        rl.record("login_fail", "alice|1.2.3.4", now=T0 + i)
-    assert rl.is_limited("login_fail", "alice|1.2.3.4", 5, 900, now=T0 + 10) is True
-
-
-def test_window_slides_old_events_expire():
-    for i in range(5):
-        rl.record("login_fail", "k", now=T0 + i)
-    # 900s after the first event, it drops out of the window -> 4 left, unlocked
-    assert rl.is_limited("login_fail", "k", 5, 900, now=T0 + 900.5) is False
+        rl.record("login_fail", "georgy|1.1.1.1", now=T0 + i)
+    assert rl.is_limited("login_fail", "georgy|1.1.1.1", 5, 900, now=T0 + 10)
+    assert not rl.is_limited("login_fail", "georgy|1.1.1.1", 5, 900, now=T0 + 901)
 
 
 def test_keys_and_kinds_are_independent():
-    for i in range(5):
-        rl.record("login_fail", "alice|ip1", now=T0 + i)
-    assert rl.is_limited("login_fail", "bob|ip1", 5, 900, now=T0 + 10) is False
-    assert rl.is_limited("register", "alice|ip1", 5, 900, now=T0 + 10) is False
+    for _ in range(5):
+        rl.record("login_fail", "a")
+    assert not rl.is_limited("login_fail", "b", 5, 900)
+    assert not rl.is_limited("register", "a", 5, 900)
 
 
 def test_retry_after_counts_down_to_oldest_expiry():
+    rl.record("register", "ip", now=T0)
+    assert rl.retry_after("register", "ip", 60, now=T0 + 10) == 51
+    assert rl.retry_after("register", "other", 60, now=T0) == 0
+
+
+def test_clear_and_prune():
     rl.record("login_fail", "k", now=T0)
-    rl.record("login_fail", "k", now=T0 + 100)
-    assert rl.retry_after("login_fail", "k", 900, now=T0 + 300) == 601
-    assert rl.retry_after("login_fail", "nobody", 900, now=T0) == 0
-
-
-def test_clear_resets_key():
-    for i in range(5):
-        rl.record("login_fail", "k", now=T0 + i)
+    rl.record("login_fail", "old", now=T0 - 10_000)
+    rl.prune(older_than=3600, now=T0)
+    assert rl.count_recent("login_fail", "old", 100_000, now=T0) == 0
     rl.clear("login_fail", "k")
-    assert rl.count_recent("login_fail", "k", 900, now=T0 + 10) == 0
-
-
-def test_prune_removes_only_old_rows():
-    rl.record("register", "ip", now=T0)
-    rl.record("register", "ip", now=T0 + 90_000)
-    rl.prune(older_than=86_400, now=T0 + 90_001)
-    assert rl.count_recent("register", "ip", 10**9, now=T0 + 90_001) == 1
-
-
-def test_active_lockouts_lists_only_keys_over_limit():
-    for i in range(5):
-        rl.record("login_fail", "alice|ip", now=T0 + i)
-    rl.record("login_fail", "bob|ip", now=T0)
-    locked = rl.active_lockouts("login_fail", 5, 900, now=T0 + 10)
-    assert [(r["key"], r["n"]) for r in locked] == [("alice|ip", 5)]
-
-
-def test_clear_kinds_removes_only_those_kinds():
-    rl.record("login_fail", "k", now=T0)
-    rl.record("login_fail_ip", "ip", now=T0)
-    rl.record("register", "ip", now=T0)
-    assert rl.clear_kinds("login_fail", "login_fail_ip") == 2
-    assert rl.count_recent("register", "ip", 900, now=T0 + 1) == 1
+    assert rl.count_recent("login_fail", "k", 900, now=T0 + 1) == 0

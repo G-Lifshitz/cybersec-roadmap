@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
-from models.roadmap import split_tags
+from domain.tags import split_tags
 
 # Calendar shading by minutes studied that day: (minimum minutes, shade 1-4),
 # checked from the top down. Changing the scale is a data change.
@@ -92,11 +92,16 @@ def short_date(day):
 
 
 def to_entries(rows):
-    """Model rows (day 'YYYY-MM-DD', minutes, skill_tags) -> Entry objects."""
+    """Rows (day as a date or 'YYYY-MM-DD', minutes, skill_tags) -> Entry objects."""
     return [
-        Entry(date.fromisoformat(row["day"]), int(row["minutes"] or 0), tuple(split_tags(row["skill_tags"])))
+        Entry(_as_date(row["day"]), int(row["minutes"] or 0), tuple(split_tags(row["skill_tags"])))
         for row in rows
     ]
+
+
+def _as_date(value):
+    # SQL Server returns a date object; tests and older callers pass the ISO string.
+    return value if isinstance(value, date) else date.fromisoformat(str(value))
 
 
 def shade_for(minutes):

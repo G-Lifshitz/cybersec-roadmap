@@ -1,127 +1,80 @@
-from db import get_db
+"""Progress logs: what a user has actually done on an item.
+
+Every query filters on the log's own user_id. Anything that needs an item's
+skill tags (weak skills, minutes per skill) gets them from the roadmap service
+and joins in Python; see domain/insights.py.
+"""
+from db import transaction
+
+FELT_DIFFICULTIES = ("easy", "fair", "hard", "brutal")
+_COLUMNS = "id, item_id, checked_in_at, completion_pct, felt_difficulty, notes, time_spent_mins"
 
 
-def get_logs_for_item(item_id):
-    with get_db() as conn:
-        return conn.execute(
-            """SELECT * FROM progress_logs
-               WHERE item_id = ?
-               ORDER BY checked_in_at DESC, id DESC""",
-            (item_id,),
-        ).fetchall()
+def get_logs_for_item(user_id, item_id):
+    with transaction() as cur:
+        cur.execute(f"""SELECT {_COLUMNS} FROM progress_logs
+                        WHERE user_id = %s AND item_id = %s
+                        ORDER BY checked_in_at DESC, id DESC""", (user_id, item_id))
+        return cur.fetchall()
 
 
-def add_log(item_id, completion_pct, felt_difficulty, notes, time_spent_mins):
-    with get_db() as conn:
-        cur = conn.execute(
+def add_log(user_id, item_id, completion_pct, felt_difficulty, notes, time_spent_mins):
+    """Insert a log and return its id. The caller has already checked the item is this user's."""
+    with transaction() as cur:
+        cur.execute(
             """INSERT INTO progress_logs
-               (item_id, completion_pct, felt_difficulty, notes, time_spent_mins)
-               VALUES (?, ?, ?, ?, ?)""",
-            (item_id, completion_pct, felt_difficulty, notes, time_spent_mins),
+               (user_id, item_id, completion_pct, felt_difficulty, notes, time_spent_mins)
+               OUTPUT INSERTED.id VALUES (%s, %s, %s, %s, %s, %s)""",
+            (user_id, item_id, completion_pct, felt_difficulty, notes, time_spent_mins),
         )
-        # Auto-update parent item status based on completion
-        if completion_pct >= 100:
-            conn.execute(
-                "UPDATE roadmap_items SET status = 'completed' WHERE id = ?",
-                (item_id,),
-            )
-        elif completion_pct > 0:
-            conn.execute(
-                "UPDATE roadmap_items SET status = 'in_progress' WHERE id = ?",
-                (item_id,),
-            )
-        return cur.lastrowid
+        return cur.fetchone()["id"]
 
 
-def latest_completion(item_id):
-    """Return the most recent completion_pct for an item."""
-    with get_db() as conn:
-        row = conn.execute(
-            """SELECT completion_pct FROM progress_logs
-               WHERE item_id = ?
-               ORDER BY checked_in_at DESC, id DESC LIMIT 1""",
-            (item_id,),
-        ).fetchone()
-    return row["completion_pct"] if row else 0
+def latest_completion_by_item(user_id):
+    """{item_id: completion_pct of the most recent log} for every item this user has logged."""
+    with transaction() as cur:
+        cur.execute("""SELECT item_id, completion_pct FROM (
+                           SELECT item_id, completion_pct,
+                                  ROW_NUMBER() OVER (PARTITION BY item_id
+                                                     ORDER BY checked_in_at DESC, id DESC) AS rn
+                           FROM progress_logs WHERE user_id = %s) AS latest
+                       WHERE rn = 1""", (user_id,))
+        return {row["item_id"]: row["completion_pct"] for row in cur.fetchall()}
 
 
-def weak_skills(user_id):
-    """
-    Return skill tags where this user frequently finds things hard/brutal
-    (more than 50% of their rated logs for that tag are 'hard' or 'brutal').
-    Used to personalise YouTube recommendations.
-    """
-    hard_values = {"hard", "brutal"}
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT ri.skill_tags, pl.felt_difficulty
-               FROM progress_logs pl
-               JOIN roadmap_items ri ON ri.id = pl.item_id
-               WHERE pl.felt_difficulty IS NOT NULL
-                 AND ri.user_id = ?""",
-            (user_id,),
-        ).fetchall()
-
-    tag_counts = {}
-    for row in rows:
-        tags = [t.strip() for t in (row["skill_tags"] or "").split(",") if t.strip()]
-        for tag in tags:
-            if tag not in tag_counts:
-                tag_counts[tag] = {"total": 0, "hard": 0}
-            tag_counts[tag]["total"] += 1
-            if row["felt_difficulty"] in hard_values:
-                tag_counts[tag]["hard"] += 1
-
-    weak = [
-        tag for tag, counts in tag_counts.items()
-        if counts["total"] > 0 and counts["hard"] / counts["total"] > 0.5
-    ]
-    return weak
-
-
-def total_time_spent(user_id):
-    with get_db() as conn:
-        row = conn.execute(
-            """SELECT SUM(pl.time_spent_mins) AS total
-               FROM progress_logs pl
-               JOIN roadmap_items ri ON ri.id = pl.item_id
-               WHERE ri.user_id = ?""",
-            (user_id,),
-        ).fetchone()
-    return row["total"] or 0
-
-
-def logs_for_user(user_id):
-    """Every log on this user's items, oldest first, with the item title (used by the data export).
-
-    Logs have no user_id of their own, so ownership comes through the JOIN (ADR 3).
-    """
-    with get_db() as conn:
-        return conn.execute(
-            """SELECT pl.id, pl.item_id, ri.title AS item_title, pl.checked_in_at,
-                      pl.completion_pct, pl.felt_difficulty, pl.notes, pl.time_spent_mins
-               FROM progress_logs pl
-               JOIN roadmap_items ri ON ri.id = pl.item_id
-               WHERE ri.user_id = ?
-               ORDER BY pl.id""",
-            (user_id,),
-        ).fetchall()
+def rated_logs(user_id):
+    """(item_id, felt_difficulty) for every log with a difficulty rating."""
+    with transaction() as cur:
+        cur.execute("""SELECT item_id, felt_difficulty FROM progress_logs
+                       WHERE user_id = %s AND felt_difficulty IS NOT NULL""", (user_id,))
+        return cur.fetchall()
 
 
 def time_entries(user_id):
-    """(day, minutes, skill_tags) for every log on this user's items, for the stats page.
+    """(item_id, day, minutes) for every log; a log without a time counts as 0 minutes."""
+    with transaction() as cur:
+        cur.execute("""SELECT item_id, CONVERT(date, checked_in_at) AS day,
+                              COALESCE(time_spent_mins, 0) AS minutes
+                       FROM progress_logs WHERE user_id = %s ORDER BY id""", (user_id,))
+        return cur.fetchall()
 
-    day is the UTC date the log was saved; a log without a time counts as 0 minutes.
-    Ownership comes through the JOIN, like every other progress query (ADR 3).
-    """
-    with get_db() as conn:
-        return conn.execute(
-            """SELECT date(pl.checked_in_at) AS day,
-                      COALESCE(pl.time_spent_mins, 0) AS minutes,
-                      ri.skill_tags
-               FROM progress_logs pl
-               JOIN roadmap_items ri ON ri.id = pl.item_id
-               WHERE ri.user_id = ?
-               ORDER BY pl.id""",
-            (user_id,),
-        ).fetchall()
+
+def all_logs(user_id):
+    """Every log this user has, oldest first."""
+    with transaction() as cur:
+        cur.execute(f"SELECT {_COLUMNS} FROM progress_logs WHERE user_id = %s ORDER BY id", (user_id,))
+        return cur.fetchall()
+
+
+def delete_for_item(user_id, item_id):
+    """Remove an item's logs (called by roadmap when the item is deleted). Returns rows removed."""
+    with transaction() as cur:
+        cur.execute("DELETE FROM progress_logs WHERE user_id = %s AND item_id = %s", (user_id, item_id))
+        return cur.rowcount
+
+
+def delete_for_user(user_id):
+    """Remove every log of a user (called by roadmap before it deletes the account)."""
+    with transaction() as cur:
+        cur.execute("DELETE FROM progress_logs WHERE user_id = %s", (user_id,))
+        return cur.rowcount

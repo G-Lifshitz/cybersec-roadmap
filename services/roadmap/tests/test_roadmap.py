@@ -1,31 +1,19 @@
-import os
-import tempfile
+"""Roadmap model against a real SQL Server (TEST_DATABASE_URL); see conftest.py."""
 import pytest
 
-# Point DB at a temp file before importing app modules
-tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-os.environ["DATA_DIR"] = os.path.dirname(tmp.name)
-
-import db
 import models.roadmap as roadmap
 import models.users as users
+from domain.tags import split_tags
 
-# Override DB_PATH to use temp file
-db.DB_PATH = tmp.name
-
+pytestmark = pytest.mark.db
 
 UID = None  # id of the test user every item belongs to; set fresh for each test
 
 
 @pytest.fixture(autouse=True)
-def fresh_db():
+def alice(clean_db):
     global UID
-    db.init_db()
     UID = users.create_user("alice", "correct-horse")
-    yield
-    # Wipe tables between tests
-    with db.get_db() as conn:
-        conn.executescript("DELETE FROM progress_logs; DELETE FROM roadmap_items; DELETE FROM users;")
 
 
 def test_create_item():
@@ -215,8 +203,8 @@ def test_update_cannot_inject_through_column_names():
 
 
 def test_split_tags_trims_lowercases_and_drops_empties():
-    assert roadmap.split_tags(" Web, NETWORK ,, ") == ["web", "network"]
-    assert roadmap.split_tags(None) == []
+    assert split_tags(" Web, NETWORK ,, ") == ["web", "network"]
+    assert split_tags(None) == []
 
 
 def _rows(*titles):

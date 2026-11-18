@@ -1,0 +1,19 @@
+# Runtime dependencies, every version pinned (direct ones first, then what they pull in).
+# Direct: 5 third-party packages (soft cap 12, A2 §1b).
+Flask==3.0.3
+Flask-Cors==5.0.0
+pymssql==2.3.2
+gunicorn==23.0.0
+requests==2.32.3
+# transitive
+blinker==1.9.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+click==8.5.1
+idna==3.20
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+packaging==26.3
+urllib3==2.8.0
+Werkzeug==3.1.9

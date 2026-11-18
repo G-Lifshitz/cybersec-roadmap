@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
-from services.assessment import LEVEL_LABELS, LEVELS
+from domain.assessment import LEVEL_LABELS, LEVELS
 
 # What a phase looks like for this user.
 KNOWN = "known"        # below the user's level: assumed covered

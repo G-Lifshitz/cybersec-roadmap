@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from services.timelines import CURRENT, DONE, KNOWN, LOCKED, TimelinePlanner
+from domain.timelines import CURRENT, DONE, KNOWN, LOCKED, TimelinePlanner
 
 
 def _phase(name, level, weeks, steps):

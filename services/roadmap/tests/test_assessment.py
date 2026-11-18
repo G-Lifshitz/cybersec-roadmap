@@ -1,10 +1,10 @@
 """Scoring logic. Uses a small fake bank injected through the constructor."""
 import pytest
 
-from services.assessment import (
+from domain.assessment import (
     LEVELS, AssessmentError, Questionnaire, level_for,
 )
-from services.question_bank import FIELDS as REAL_BANK
+from domain.question_bank import FIELDS as REAL_BANK
 
 
 def _question(qid, skill):

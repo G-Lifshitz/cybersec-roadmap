@@ -3,8 +3,8 @@ from datetime import date, timedelta
 
 import pytest
 
-import services.stats as stats
-from services.stats import Entry
+import domain.stats as stats
+from domain.stats import Entry
 
 TODAY = date(2026, 10, 2)          # a Friday
 
