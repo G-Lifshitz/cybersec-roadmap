@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cyberroadmap</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <main class="container">
+    <h1>cyberroadmap</h1>
+    <p>The static UI is being ported from the Assignment 1 templates. Service status:</p>
+    <ul id="status"></ul>
+  </main>
+  <script>
+    // Temporary page: shows each service's /health so the compose stack can be checked.
+    const list = document.getElementById("status");
+    for (const [name, url] of Object.entries({ roadmap: APP_CONFIG.ROADMAP_URL, progress: APP_CONFIG.PROGRESS_URL })) {
+      const li = document.createElement("li");
+      li.textContent = `${name}: checking…`;
+      list.appendChild(li);
+      fetch(`${url}/health`)
+        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
+        .then(({ ok, body }) => { li.textContent = `${name}: ${ok ? "up" : "starting"} (db ${body.db}, version ${body.version})`; })
+        .catch(() => { li.textContent = `${name}: unreachable`; });
+    }
+  </script>
+</body>
+</html>
