@@ -417,3 +417,8 @@ a.round-btn:hover { background: #cfbb9e; text-decoration: none; }
   .stats-3 { grid-template-columns: 1fr 1fr; }
   .stats-3 .stat:last-child { grid-column: span 2; }
 }
+
+/* ── Static UI (Assignment 2) ─────────────────────────────────────────── */
+/* Shown while a service or its database wakes up after idle (js/api.js). */
+.flash.wake { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10; max-width: 560px; box-shadow: 0 6px 24px rgba(0, 0, 0, .12); border-left-color: var(--amber); }
+.loading { padding: 24px 0; }

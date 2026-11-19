@@ -1,30 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>cyberroadmap</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Only our own scripts run (no inline JS), and the page may only call the two services. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' http://localhost:8001 http://localhost:8002 https://*.azurecontainerapps.io; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'self'">
+  <title>cyberroadmap · cyberroadmap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="config.js"></script>
+  <script type="module" src="js/pages/index.js"></script>
 </head>
 <body>
-  <main class="container">
-    <h1>cyberroadmap</h1>
-    <p>The static UI is being ported from the Assignment 1 templates. Service status:</p>
-    <ul id="status"></ul>
-  </main>
-  <script>
-    // Temporary page: shows each service's /health so the compose stack can be checked.
-    const list = document.getElementById("status");
-    for (const [name, url] of Object.entries({ roadmap: APP_CONFIG.ROADMAP_URL, progress: APP_CONFIG.PROGRESS_URL })) {
-      const li = document.createElement("li");
-      li.textContent = `${name}: checking…`;
-      list.appendChild(li);
-      fetch(`${url}/health`)
-        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
-        .then(({ ok, body }) => { li.textContent = `${name}: ${ok ? "up" : "starting"} (db ${body.db}, version ${body.version})`; })
-        .catch(() => { li.textContent = `${name}: unreachable`; });
-    }
-  </script>
+  <main><p class="muted loading">Loading…</p></main>
 </body>
 </html>
