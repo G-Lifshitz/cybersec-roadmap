@@ -79,3 +79,35 @@ Decision: Don't sync with either platform; users add and update their roadmap it
 Alternatives considered: Scraping each user's public profile pages — rejected because it breaks whenever a page layout changes and may break the platforms' terms of service. Asking each user for a platform API token and polling with it — rejected because the app would then store third-party credentials for every user, a secrets-management and breach risk far bigger than the convenience is worth.
 
 Consequences: The app stores no third-party credentials and nothing breaks when those platforms change, which also keeps it within the deployment rule of no required external dependencies. The cost is manual data entry for every item and every study session.
+
+---
+
+## 6. The split: accounts and items in roadmap, only progress logs in progress
+
+Date: 2026-11-19
+
+Status: Decided
+
+Context: Assignment 2 splits the app into exactly two services along the ADR 2 seam, each with its own database. Accounts, login history, rate limits and assessments belonged to neither domain in ADR 2, and only two cross-domain queries existed: `add_log()` updating the item's status and `weak_skills()` joining items for their tags.
+
+Decision: The roadmap service owns accounts, rate limits, assessments, the timeline and roadmap items, and issues a signed bearer token at login; the progress service owns only progress logs. Each former join is now an HTTP call with a 2-second timeout that forwards the user's own token: logging progress asks roadmap whether the item exists and is the caller's (refusing with 503 if roadmap is down), then syncs the item's status, while the summary and stats fetch item tags and leave out the tag-based parts when roadmap is down.
+
+Alternatives considered: A third service for accounts, rejected because the assignment allows exactly two containers. Calling progress-to-roadmap with a service-to-service secret instead of the user's token, rejected because it adds a secret and lets progress act on any user's items; forwarding the token keeps roadmap's ownership checks in force.
+
+Consequences: Only three kinds of call cross the seam (item check and status sync, tags for reports, log deletion when an item or account is deleted), which suggests the seam is in the right place. Progress verifies tokens with the shared TOKEN_SECRET without asking roadmap, so a revoked token can still read progress data until it expires (12 hours); writes are safe because every write goes through roadmap first.
+
+---
+
+## 7. Data and migrations: own database per service, numbered SQL files run at startup
+
+Date: 2026-11-19
+
+Status: Decided
+
+Context: Assignment 1 created its SQLite schema on every boot and patched old databases with `ALTER TABLE` checks. On SQL Server each service has its own database, so the foreign key from `progress_logs` to `roadmap_items` cannot exist, and ownership can no longer come from a join (ADR 3). There was no production data to move: Assignment 1 ran only locally and had no seed data.
+
+Decision: Each service applies its own forward-only migrations (`migrations/NNN_name.sql`) at startup, before serving: each file runs once, in one transaction, recorded in `schema_migrations`, with `sp_getapplock` so two starts can't apply it twice. `progress_logs` gets its own `user_id`, and `item_id` becomes a plain ID whose integrity is enforced in code: progress checks the item with roadmap before inserting, and roadmap asks progress to delete the logs when an item or account is deleted.
+
+Alternatives considered: Alembic, rejected because the models use plain SQL with no ORM, so it would add SQLAlchemy only to run migrations. Running migrations as a separate pipeline step, rejected because the GitHub runner would need the database password and a firewall opening to Azure SQL, while the app already has both.
+
+Consequences: Both databases start empty and evolve only through migration files that are never edited once applied; a fix is a new file. If progress is down when an item is deleted, the item's logs stay behind as orphans, which progress ignores because every report starts from the items roadmap returns.
