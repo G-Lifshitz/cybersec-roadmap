@@ -12,6 +12,8 @@
 #   gh auth login                                    # once, for the GitHub secrets in step 7
 #   bash infra/azure-setup.sh
 #
+# Safe to re-run: anything that already exists is kept, not recreated.
+#
 # No password is written to a file or echoed. The two service passwords and
 # TOKEN_SECRET are generated here and go straight into GitHub Actions secrets.
 set -euo pipefail
@@ -29,6 +31,15 @@ SQL_LOCATION="${SQL_LOCATION:-$LOCATION}"
 : "${SQL_ADMIN_PASSWORD:?set SQL_ADMIN_PASSWORD (read -rs SQL_ADMIN_PASSWORD)}"
 
 step() { printf '\n== %s\n' "$*"; }
+exists() { "$@" -o none >/dev/null 2>&1; }   # true if an `az ... show` finds the resource
+
+# Cloud Shell doesn't always ship sqlcmd: fetch Microsoft's go-sqlcmd binary into ~/bin.
+if ! command -v sqlcmd >/dev/null 2>&1; then
+  mkdir -p "$HOME/bin"
+  curl -sSL https://github.com/microsoft/go-sqlcmd/releases/latest/download/sqlcmd-linux-amd64.tar.bz2 \
+    | tar -xj -C "$HOME/bin" sqlcmd
+  export PATH="$HOME/bin:$PATH"
+fi
 
 # Letters and digits only (nothing to URL-encode in DATABASE_URL), with the
 # upper/lower/digit mix Azure SQL's password policy wants.
@@ -47,6 +58,7 @@ az group create --name "$RG" --location "$LOCATION" -o none
 RG_ID=$(az group show --name "$RG" --query id -o tsv)
 
 step "3. Storage account with static website (the UI)"
+exists az storage account show --name "$STORAGE" --resource-group "$RG" ||
 az storage account create --name "$STORAGE" --resource-group "$RG" --location "$LOCATION" \
   --sku Standard_LRS --kind StorageV2 --min-tls-version TLS1_2 -o none
 az storage blob service-properties update --account-name "$STORAGE" --auth-mode key \
@@ -56,6 +68,7 @@ UI_ORIGIN="${UI_URL%/}"
 echo "UI: $UI_ORIGIN"
 
 step "4. SQL server and one serverless database per service (free offer)"
+exists az sql server show --name "$SQL_SERVER" --resource-group "$RG" ||
 az sql server create --name "$SQL_SERVER" --resource-group "$RG" --location "$SQL_LOCATION" \
   --admin-user sqladmin --admin-password "$SQL_ADMIN_PASSWORD" --minimal-tls-version 1.2 -o none
 # 0.0.0.0-0.0.0.0 is Azure's special rule for "allow Azure services".
@@ -63,6 +76,7 @@ az sql server firewall-rule create --resource-group "$RG" --server "$SQL_SERVER"
   --name AllowAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 -o none
 for svc in "${SERVICES[@]}"; do
   # The free offer fixes auto-pause (60 min) and max size (32 GB): don't pass them.
+  exists az sql db show --resource-group "$RG" --server "$SQL_SERVER" --name "${PREFIX}-${svc}-db" ||
   az sql db create --resource-group "$RG" --server "$SQL_SERVER" --name "${PREFIX}-${svc}-db" \
     --edition GeneralPurpose --compute-model Serverless --family Gen5 \
     --min-capacity 0.5 --capacity 1 --backup-storage-redundancy Local \
@@ -91,12 +105,15 @@ done
 az sql server firewall-rule delete --resource-group "$RG" --server "$SQL_SERVER" --name setup-ip -o none
 
 step "5. Container Apps environment and one app per service"
+az extension add --name containerapp --upgrade --yes -o none
 # --logs-destination none: no Log Analytics workspace (an extra resource with
 # its own billing). `az containerapp logs show --follow` still streams stdout.
+exists az containerapp env show --name "$ENVIRONMENT" --resource-group "$RG" ||
 az containerapp env create --name "$ENVIRONMENT" --resource-group "$RG" --location "$LOCATION" \
   --logs-destination none -o none
 for svc in "${SERVICES[@]}"; do
   # Placeholder image; the first CD run replaces it and sets env vars and secrets.
+  exists az containerapp show --name "${PREFIX}-${svc}" --resource-group "$RG" ||
   az containerapp create --name "${PREFIX}-${svc}" --resource-group "$RG" --environment "$ENVIRONMENT" \
     --image mcr.microsoft.com/k8se/quickstart:latest --ingress external --target-port 80 \
     --min-replicas 0 --max-replicas 1 --cpu 0.25 --memory 0.5Gi -o none
@@ -106,14 +123,17 @@ step "6. The pipeline's identity (OIDC, Contributor on this resource group only)
 az identity create --name "$IDENTITY" --resource-group "$RG" --location "$LOCATION" -o none
 CLIENT_ID=$(az identity show --name "$IDENTITY" --resource-group "$RG" --query clientId -o tsv)
 PRINCIPAL_ID=$(az identity show --name "$IDENTITY" --resource-group "$RG" --query principalId -o tsv)
+[ -n "$(az role assignment list --assignee "$PRINCIPAL_ID" --role Contributor --scope "$RG_ID" --query "[0].id" -o tsv)" ] ||
 az role assignment create --assignee-object-id "$PRINCIPAL_ID" --assignee-principal-type ServicePrincipal \
   --role Contributor --scope "$RG_ID" -o none
 # GitHub may send the subject with names or with numeric IDs; register both.
 OWNER_ID=$(gh api "repos/${GH_REPO}" --jq .owner.id)
 REPO_ID=$(gh api "repos/${GH_REPO}" --jq .id)
+exists az identity federated-credential show --name github-main --identity-name "$IDENTITY" --resource-group "$RG" ||
 az identity federated-credential create --name github-main --identity-name "$IDENTITY" --resource-group "$RG" \
   --issuer https://token.actions.githubusercontent.com --audiences api://AzureADTokenExchange \
   --subject "repo:${GH_REPO}:ref:refs/heads/main" -o none
+exists az identity federated-credential show --name github-main-ids --identity-name "$IDENTITY" --resource-group "$RG" ||
 az identity federated-credential create --name github-main-ids --identity-name "$IDENTITY" --resource-group "$RG" \
   --issuer https://token.actions.githubusercontent.com --audiences api://AzureADTokenExchange \
   --subject "repo:${GH_REPO%%/*}@${OWNER_ID}/${GH_REPO##*/}@${REPO_ID}:ref:refs/heads/main" -o none
