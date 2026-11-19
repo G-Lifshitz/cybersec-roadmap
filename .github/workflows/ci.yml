@@ -1,0 +1,75 @@
+# CI: runs on every push and every pull request (A2 §5).
+# Lint, tests against a throwaway SQL Server container (never Azure SQL),
+# coverage of at least 70% per service, and both Docker images must build.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [roadmap, progress]
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: CI_Only_SA_2026      # throwaway container that lives for this job only
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P CI_Only_SA_2026 -C -Q 'SELECT 1' -b -o /dev/null"
+          --health-interval 5s --health-timeout 5s --health-retries 30 --health-start-period 20s
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/${{ matrix.service }}/requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      # Same script as local compose: databases and one login per service.
+      - name: Create the test databases
+        working-directory: .
+        run: |
+          docker cp db/init.sql ${{ job.services.mssql.id }}:/tmp/init.sql
+          docker exec ${{ job.services.mssql.id }} /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P CI_Only_SA_2026 -C -b -i /tmp/init.sql \
+            -v ROADMAP_DB_PASSWORD=CI_Roadmap_2026 PROGRESS_DB_PASSWORD=CI_Progress_2026
+
+      - name: Tests with coverage (fails under 70%)
+        env:
+          TEST_DATABASE_URL: >-
+            mssql+pymssql://${{ matrix.service }}_svc:${{ matrix.service == 'roadmap' && 'CI_Roadmap_2026' || 'CI_Progress_2026' }}@localhost:1433/${{ matrix.service }}_test
+        run: pytest -q --cov=. --cov-report=term-missing --cov-fail-under=70
+
+  build:
+    name: docker build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [roadmap, progress]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build --build-arg GIT_SHA=${{ github.sha }} -t ${{ matrix.service }}:ci services/${{ matrix.service }}
