@@ -1,0 +1,188 @@
+openapi: 3.1.0
+info:
+  title: cyberroadmap progress service
+  version: "2.0.0"
+  description: >
+    Progress logs on roadmap items, the study summary and the stats page. Every route
+    except /health needs `Authorization: Bearer <token>` (issued by the roadmap service)
+    and only ever touches the caller's own logs. Anything about an item (does it exist,
+    is it yours, its tags) is asked of the roadmap service with the same token.
+servers:
+  - url: http://localhost:8002
+    description: docker compose
+  - url: https://glifshitz-ieu2024-progress.happyhill-12442ccf.germanywestcentral.azurecontainerapps.io
+    description: Azure
+security:
+  - bearer: []
+
+paths:
+  /health:
+    get:
+      summary: Can this service read and write its own database? (Roadmap's state is not included.)
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Healthy" }
+        "503": { $ref: "#/components/responses/Unhealthy" }
+
+  /items/{item_id}/logs:
+    parameters:
+      - { name: item_id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: The caller's logs for one item, newest first, and the latest completion
+      responses:
+        "200":
+          description: Logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs: { type: array, items: { $ref: "#/components/schemas/Log" } }
+                  completion: { type: integer, minimum: 0, maximum: 100 }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Log a session. Checks the item with roadmap first, then syncs its status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                completion_pct: { type: integer, minimum: 0, maximum: 100, description: Clamped to 0-100 }
+                felt_difficulty: { type: [string, "null"], enum: [easy, fair, hard, brutal, null] }
+                time_spent_mins: { type: integer, minimum: 0, maximum: 1440, description: Clamped to 0-1440 }
+                notes: { type: string, maxLength: 2000 }
+      responses:
+        "201":
+          description: Saved. status_synced is false when the item's status couldn't be updated in roadmap.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  item_status: { type: string }
+                  status_synced: { type: boolean }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503":
+          description: Roadmap unreachable (error roadmap_unavailable), nothing saved; or this service's database is starting up
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete the caller's logs for one item (called by roadmap when the item is deleted)
+      responses:
+        "200": { $ref: "#/components/responses/Deleted" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /logs:
+    get:
+      summary: All of the caller's logs, oldest first
+      responses:
+        "200":
+          description: Logs
+          content:
+            application/json:
+              schema: { type: object, properties: { logs: { type: array, items: { $ref: "#/components/schemas/Log" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete all of the caller's logs (called by roadmap before deleting the account)
+      responses:
+        "200": { $ref: "#/components/responses/Deleted" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /summary:
+    get:
+      summary: Completion per item, total time and weak skills (degraded when roadmap is down)
+      responses:
+        "200":
+          description: Summary. weak_skills is null and roadmap_available false when roadmap couldn't be reached.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  completion: { type: object, additionalProperties: { type: integer }, description: "item id -> latest %" }
+                  total_minutes: { type: integer }
+                  weak_skills: { type: [array, "null"], items: { type: string } }
+                  roadmap_available: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /stats:
+    get:
+      summary: Totals, streaks, a month calendar, minutes per skill and the last 12 weeks
+      parameters:
+        - { name: month, in: query, schema: { type: string, pattern: "^\\d{4}-\\d{2}$" }, description: "YYYY-MM, default the current month" }
+      responses:
+        "200":
+          description: Report. report.skills is null and roadmap_available false when roadmap couldn't be reached.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report: { type: object }
+                  roadmap_available: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Token issued by the roadmap service; verified here with the shared TOKEN_SECRET.
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, examples: [roadmap_unavailable, not_found, starting_up] }
+        message: { type: string }
+    Log:
+      type: object
+      properties:
+        id: { type: integer }
+        item_id: { type: integer, description: ID of a roadmap item (no foreign key across services) }
+        checked_in_at: { type: string, format: date-time }
+        completion_pct: { type: integer }
+        felt_difficulty: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        time_spent_mins: { type: [integer, "null"] }
+
+  responses:
+    Healthy:
+      description: The service can read and write its own database
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { const: ok }
+              db: { const: ok }
+              version: { type: string, description: Git SHA of the image }
+    Unhealthy:
+      description: The service can't reach its own database
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { const: error }
+              db: { type: string }
+              version: { type: string }
+    Deleted:
+      description: How many logs were deleted
+      content:
+        application/json:
+          schema: { type: object, properties: { deleted: { type: integer } } }
+    Error:
+      description: Error with a user-facing message
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

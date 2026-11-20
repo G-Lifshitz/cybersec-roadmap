@@ -1,0 +1,381 @@
+openapi: 3.1.0
+info:
+  title: cyberroadmap roadmap service
+  version: "2.0.0"
+  description: >
+    Accounts and login tokens, roadmap items, the career timeline and the assessment.
+    Every route except /health, /options and /auth/* needs `Authorization: Bearer <token>`
+    and only ever returns the caller's own data.
+servers:
+  - url: http://localhost:8001
+    description: docker compose
+  - url: https://glifshitz-ieu2024-roadmap.happyhill-12442ccf.germanywestcentral.azurecontainerapps.io
+    description: Azure
+security:
+  - bearer: []
+
+paths:
+  /health:
+    get:
+      summary: Can this service read and write its own database?
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Healthy" }
+        "503": { $ref: "#/components/responses/Unhealthy" }
+
+  /auth/register:
+    post:
+      summary: Create an account and log in
+      security: []
+      requestBody: { $ref: "#/components/requestBodies/Credentials" }
+      responses:
+        "201": { $ref: "#/components/responses/Session" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooMany" }
+
+  /auth/login:
+    post:
+      summary: Log in (rate-limited per username+IP and per IP)
+      security: []
+      requestBody: { $ref: "#/components/requestBodies/Credentials" }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/TooMany" }
+
+  /me:
+    get:
+      summary: The caller's account and recent sign-ins
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  logins: { type: array, items: { $ref: "#/components/schemas/LoginEvent" } }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete the account (asks progress to delete the logs first)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [password], properties: { password: { type: string } } }
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+
+  /me/password:
+    post:
+      summary: Change password; every older token stops working
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current, new]
+              properties: { current: { type: string }, new: { type: string, minLength: 8 } }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /options:
+    get:
+      summary: Allowed values for item fields
+      security: []
+      responses:
+        "200":
+          description: Option lists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  types: { type: array, items: { type: string } }
+                  platforms: { type: array, items: { type: string } }
+                  difficulties: { type: array, items: { type: string } }
+                  statuses: { type: array, items: { type: string } }
+
+  /dashboard:
+    get:
+      summary: Item counts by status, per-skill summary and all tags
+      responses:
+        "200":
+          description: Dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  counts: { type: object, additionalProperties: { type: integer } }
+                  skills: { type: object, additionalProperties: { type: object, additionalProperties: { type: integer } } }
+                  tags: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /items:
+    get:
+      summary: The caller's items, optionally filtered (also called by progress)
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: skill, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Item" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Add an item
+      requestBody: { $ref: "#/components/requestBodies/ItemFields" }
+      responses:
+        "201": { $ref: "#/components/responses/OneItem" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /items/{item_id}:
+    parameters:
+      - { name: item_id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One item, only if it is the caller's (also called by progress)
+      responses:
+        "200": { $ref: "#/components/responses/OneItem" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Edit an item
+      requestBody: { $ref: "#/components/requestBodies/ItemFields" }
+      responses:
+        "200": { $ref: "#/components/responses/OneItem" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete an item and ask progress to delete its logs (best effort)
+      responses:
+        "200":
+          description: Deleted. logs_deleted is null when progress couldn't be reached.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+                  logs_deleted: { type: [integer, "null"] }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /items/{item_id}/status:
+    parameters:
+      - { name: item_id, in: path, required: true, schema: { type: integer } }
+    patch:
+      summary: Set an item's status (called by progress after a log)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: { status: { type: string, enum: [not_started, in_progress, completed] } }
+      responses:
+        "200": { $ref: "#/components/responses/OneItem" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /path:
+    get:
+      summary: The career field and level the timeline uses, and the choices
+      responses:
+        "200": { description: Current path and choices, content: { application/json: { schema: { type: object } } } }
+    put:
+      summary: Choose a career field and level
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [field, level], properties: { field: { type: string }, level: { type: string } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { type: object } } } }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /timeline:
+    get:
+      summary: The career timeline laid against the caller's roadmap (null without a path)
+      responses:
+        "200": { description: Timeline, content: { application/json: { schema: { type: object } } } }
+
+  /timeline/phases/{number}:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: integer } }
+    post:
+      summary: Add a phase's steps to the roadmap, skipping titles already there
+      responses:
+        "200": { description: How many were added, content: { application/json: { schema: { type: object, properties: { added: { type: integer } } } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /assessments:
+    get:
+      summary: Assessment fields and the caller's past attempts
+      responses:
+        "200": { description: Fields and history, content: { application/json: { schema: { type: object } } } }
+
+  /assessments/{field}:
+    parameters:
+      - { name: field, in: path, required: true, schema: { type: string } }
+    get:
+      summary: A field's questions (without the points)
+      responses:
+        "200": { description: Questions, content: { application/json: { schema: { type: object } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Submit answers; the result sets the career path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties: { answers: { type: object, additionalProperties: { type: integer } } }
+      responses:
+        "201": { description: Scored attempt, content: { application/json: { schema: { type: object } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /assessments/results/{attempt_id}:
+    parameters:
+      - { name: attempt_id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One of the caller's attempts, re-scored
+      responses:
+        "200": { description: Result, content: { application/json: { schema: { type: object } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Signed token from /auth/login or /auth/register, valid for TOKEN_TTL_S seconds.
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, examples: [not_found, starting_up, too_many_requests] }
+        message: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        is_admin: { type: boolean }
+        path_field: { type: [string, "null"] }
+        path_level: { type: [string, "null"] }
+    LoginEvent:
+      type: object
+      properties:
+        success: { type: boolean }
+        ip: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    Item:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        title: { type: string }
+        type: { type: string, enum: [course, cert, lab, book, project] }
+        platform: { type: [string, "null"] }
+        url: { type: [string, "null"] }
+        skill_tags: { type: [string, "null"], description: "Comma-separated, e.g. web,network" }
+        difficulty: { type: string, enum: [beginner, intermediate, advanced] }
+        priority: { type: integer, minimum: 1, maximum: 5 }
+        status: { type: string, enum: [not_started, in_progress, completed] }
+        created_at: { type: string, format: date-time }
+
+  requestBodies:
+    Credentials:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [username, password]
+            properties:
+              username: { type: string, pattern: "^[A-Za-z0-9_]{3,30}$" }
+              password: { type: string, minLength: 8, maxLength: 200 }
+    ItemFields:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [title]
+            properties:
+              title: { type: string, maxLength: 200 }
+              type: { type: string }
+              platform: { type: string, maxLength: 50 }
+              url: { type: string, maxLength: 500, description: Must start with http:// or https:// }
+              skill_tags: { type: string, maxLength: 200 }
+              difficulty: { type: string }
+              priority: { type: integer, minimum: 1, maximum: 5 }
+
+  responses:
+    Healthy:
+      description: The service can read and write its own database
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { const: ok }
+              db: { const: ok }
+              version: { type: string, description: Git SHA of the image }
+    Unhealthy:
+      description: The service can't reach its own database
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { const: error }
+              db: { type: string }
+              version: { type: string }
+    Session:
+      description: Logged in
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              token: { type: string }
+              user: { $ref: "#/components/schemas/User" }
+              failed_attempts: { type: integer, description: Failed logins since the last successful one (login only) }
+    OneItem:
+      description: The item
+      content:
+        application/json:
+          schema: { type: object, properties: { item: { $ref: "#/components/schemas/Item" } } }
+    Error:
+      description: Error with a user-facing message
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooMany:
+      description: Rate limited; Retry-After gives the seconds to wait
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
