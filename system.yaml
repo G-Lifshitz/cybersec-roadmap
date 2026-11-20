@@ -1,0 +1,92 @@
+# System description (A2 §8a), validated in CI against system.schema.json.
+# Must match the code and the deployment at the graded commit.
+student: glifshitz.ieu2024
+prefix: glifshitz-ieu2024
+public_url: https://glifshitzieu2024ui.z1.web.core.windows.net
+
+ui:
+  path: ui/
+  storage_account: glifshitzieu2024ui
+  calls: [roadmap, progress]
+
+azure:
+  resource_group: rg-glifshitz-ieu2024
+  container_apps_environment: glifshitz-ieu2024-env
+  sql_server: glifshitz-ieu2024-sql
+  registry: ghcr.io/g-lifshitz
+
+services:
+  roadmap:
+    description: "Accounts and login tokens, roadmap items, the career timeline and the assessment."
+    path: services/roadmap
+    openapi: services/roadmap/openapi.yaml
+    port_default: 8000
+    health: /health
+    migrations: services/roadmap/migrations
+    env:
+      PORT: { default: 8000, description: "Port gunicorn listens on (set in the Dockerfile)" }
+      DATABASE_URL: { secret: true, description: "Connection string of the roadmap database (mssql+pymssql://user:password@host:1433/db)" }
+      TOKEN_SECRET: { secret: true, description: "Key that signs and verifies login tokens; the same value in both services" }
+      TOKEN_TTL_S: { default: 43200, description: "How long a login token stays valid, in seconds" }
+      CORS_ORIGINS: { default: "http://localhost:8080", description: "Comma-separated origins allowed to call the API from a browser (the UI)" }
+      PROGRESS_URL: { default: "http://progress:8000", description: "Base URL of the progress service" }
+      PROGRESS_TIMEOUT_S: { default: 2, description: "Timeout for every call to progress, in seconds" }
+      DB_CONNECT_DEADLINE_S: { default: 90, description: "How long a request keeps retrying the database connection while it resumes" }
+      DB_STARTUP_DEADLINE_S: { default: 180, description: "How long the migration runner waits for the database at startup" }
+      TRUST_PROXY: { default: "0", description: "1 behind Container Apps: trust one X-Forwarded-For hop for the client IP" }
+      GIT_SHA: { default: dev, description: "Commit the image was built from, reported by GET /health" }
+      LOG_LEVEL: { default: INFO, description: "Python logging level" }
+    calls:
+      - service: progress
+        url_env: PROGRESS_URL
+        endpoints: ["DELETE /items/{item_id}/logs"]
+        timeout_s: 2
+        on_failure: "The item is still deleted; its logs stay in progress as orphans, which progress ignores in every report."
+      - service: progress
+        url_env: PROGRESS_URL
+        endpoints: ["DELETE /logs"]
+        timeout_s: 2
+        on_failure: "Account deletion is refused with 503: the account is kept so no personal data is left behind, and the user can retry."
+    azure:
+      container_app: glifshitz-ieu2024-roadmap
+      sql_database: glifshitz-ieu2024-roadmap-db
+
+  progress:
+    description: "Progress logs on roadmap items, the study summary and the stats page."
+    path: services/progress
+    openapi: services/progress/openapi.yaml
+    port_default: 8000
+    health: /health
+    migrations: services/progress/migrations
+    env:
+      PORT: { default: 8000, description: "Port gunicorn listens on (set in the Dockerfile)" }
+      DATABASE_URL: { secret: true, description: "Connection string of the progress database (mssql+pymssql://user:password@host:1433/db)" }
+      TOKEN_SECRET: { secret: true, description: "Key that signs and verifies login tokens; the same value in both services" }
+      TOKEN_TTL_S: { default: 43200, description: "How long a login token stays valid, in seconds" }
+      CORS_ORIGINS: { default: "http://localhost:8080", description: "Comma-separated origins allowed to call the API from a browser (the UI)" }
+      ROADMAP_URL: { default: "http://roadmap:8000", description: "Base URL of the roadmap service" }
+      ROADMAP_TIMEOUT_S: { default: 2, description: "Timeout for every call to roadmap, in seconds" }
+      DB_CONNECT_DEADLINE_S: { default: 90, description: "How long a request keeps retrying the database connection while it resumes" }
+      DB_STARTUP_DEADLINE_S: { default: 180, description: "How long the migration runner waits for the database at startup" }
+      TRUST_PROXY: { default: "0", description: "1 behind Container Apps: trust one X-Forwarded-For hop for the client IP" }
+      GIT_SHA: { default: dev, description: "Commit the image was built from, reported by GET /health" }
+      LOG_LEVEL: { default: INFO, description: "Python logging level" }
+    calls:
+      - service: roadmap
+        url_env: ROADMAP_URL
+        endpoints: ["GET /items/{item_id}"]
+        timeout_s: 2
+        on_failure: "Logging progress is refused with 503 \"Your roadmap can't be reached right now, so progress wasn't saved\"; nothing is saved."
+      - service: roadmap
+        url_env: ROADMAP_URL
+        endpoints: ["PATCH /items/{item_id}/status"]
+        timeout_s: 2
+        on_failure: "The log is kept and the response says status_synced=false; the UI tells the user the status couldn't be updated."
+      - service: roadmap
+        url_env: ROADMAP_URL
+        endpoints: ["GET /items"]
+        timeout_s: 2
+        on_failure: "Summary and stats are degraded, not failed - totals, streaks and the calendar still show; weak skills and minutes per skill are left out (roadmap_available=false)."
+    azure:
+      container_app: glifshitz-ieu2024-progress
+      sql_database: glifshitz-ieu2024-progress-db

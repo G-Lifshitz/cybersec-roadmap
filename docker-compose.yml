@@ -1,0 +1,95 @@
+# Whole system on one machine:  docker compose up --build   (from a clean clone)
+#   UI        http://localhost:8080
+#   roadmap   http://localhost:8001/health
+#   progress  http://localhost:8002/health
+#
+# The passwords below are defaults for this local stack only: SQL Server in a
+# throwaway container on your own machine. Azure uses different, generated
+# values kept in GitHub secrets (infra/azure-setup.sh). Override any of them
+# in a .env file next to this one (git-ignored; see .env.example).
+
+x-local-secrets: &local
+  MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Local_SA_Only_2026}
+  ROADMAP_DB_PASSWORD: ${ROADMAP_DB_PASSWORD:-Local_Roadmap_Only_2026}
+  PROGRESS_DB_PASSWORD: ${PROGRESS_DB_PASSWORD:-Local_Progress_Only_2026}
+
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64          # no arm64 image; Docker Desktop runs it under Rosetta on Apple Silicon
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Local_SA_Only_2026}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"                # so you can connect from your machine (and run the db tests)
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # Runs db/init.sql once per `up` and exits. Idempotent, so restarts are safe.
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment: *local
+    volumes:
+      - ./db/init.sql:/init.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        /opt/mssql-tools18/bin/sqlcmd -S mssql -U sa -P "$$MSSQL_SA_PASSWORD" -C -b -i /init.sql
+        -v ROADMAP_DB_PASSWORD="$$ROADMAP_DB_PASSWORD" PROGRESS_DB_PASSWORD="$$PROGRESS_DB_PASSWORD"
+    restart: "no"
+
+  roadmap:
+    build:
+      context: ./services/roadmap
+      args:
+        GIT_SHA: local
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: mssql+pymssql://roadmap_svc:${ROADMAP_DB_PASSWORD:-Local_Roadmap_Only_2026}@mssql:1433/roadmap_db
+      PROGRESS_URL: http://progress:8000
+      CORS_ORIGINS: http://localhost:8080
+      TOKEN_SECRET: ${TOKEN_SECRET:-local-only-token-secret-0123456789abcdef}
+    ports:
+      - "8001:8000"
+
+  progress:
+    build:
+      context: ./services/progress
+      args:
+        GIT_SHA: local
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: mssql+pymssql://progress_svc:${PROGRESS_DB_PASSWORD:-Local_Progress_Only_2026}@mssql:1433/progress_db
+      ROADMAP_URL: http://roadmap:8000
+      CORS_ORIGINS: http://localhost:8080
+      TOKEN_SECRET: ${TOKEN_SECRET:-local-only-token-secret-0123456789abcdef}
+    ports:
+      - "8002:8000"
+
+  ui:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - roadmap
+      - progress
+
+volumes:
+  mssql-data:
