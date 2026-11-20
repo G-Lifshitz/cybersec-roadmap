@@ -15,7 +15,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Only what the service runs: no tests, no dev tools, no .env (A2 §1a: no "COPY . .").
+COPY *.py ./
+COPY domain/ domain/
+COPY models/ models/
+COPY migrations/ migrations/
 
 # Never run as root inside the container.
 RUN useradd --system --uid 10001 app && chown -R app /app

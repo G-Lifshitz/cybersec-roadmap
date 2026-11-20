@@ -1,4 +1,4 @@
-# Whole system on one machine:  docker compose up --build
+# Whole system on one machine:  docker compose up --build   (from a clean clone)
 #   UI        http://localhost:8080
 #   roadmap   http://localhost:8001/health
 #   progress  http://localhost:8002/health
