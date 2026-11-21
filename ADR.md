@@ -127,3 +127,19 @@ Decision: One GitHub Actions workflow (`pipeline.yml`) runs validate (system.yam
 Alternatives considered: A separate CD workflow triggered by `workflow_run` after CI, rejected because it adds a second trigger whose commit has to be matched by hand, while `needs:` guarantees the same commit. Running the integration test against the full compose stack in CI, rejected for now because it doubles CI time and needs both images built and SQL Server started before a single assertion; the stub is the option §5 allows, and the compose stack is exercised by hand with `docker compose stop roadmap`.
 
 Consequences: A red test, a coverage drop below 70%, an invalid system.yaml or a broken image blocks the deploy. What is deliberately not tested automatically: the static UI's JavaScript (checked by hand), the real network between the two containers, and Azure-only behaviour (cold starts, the database resuming), which the post-deploy health check covers by waiting up to 6 minutes for both /health endpoints to report this commit's SHA.
+
+---
+
+## 8. Serverless hosting: scale to zero everywhere, and make cold starts survivable
+
+Date: 2026-11-21
+
+Status: Decided
+
+Context: Nothing may run or cost money while the app is idle (A2 §7): both services on Container Apps (Consumption), each with a serverless Azure SQL database on the free offer, which pauses after 60 idle minutes, and the UI on a storage static website. The price of that is cold starts: after idle, the first request waits for a container to start and then for its database to resume, which can take about a minute and returns errors (Container Apps 503, SQL error 40613) in the meantime.
+
+Decision: Each Container App runs 0.25 vCPU and 0.5 GiB with minimum 0 and maximum 1 replicas; images live on GHCR, and logs go only to the live log stream (no Log Analytics workspace). Cold starts are absorbed at every layer instead of avoided: the migration runner waits up to 180 s for the database, each request retries its connection with backoff for up to 90 s and otherwise answers 503 "starting_up" with Retry-After, the UI retries GETs for up to 90 s behind a "starting up" banner, and the CD health check waits up to 6 minutes.
+
+Alternatives considered: Minimum 1 replica, rejected because an always-running container bills around the clock and breaks the scale-to-zero rule. Azure Container Registry, rejected because it has a fixed monthly cost while GHCR is free for this repository. A Log Analytics workspace, rejected because it is a separate resource billed per GB; the live stream (`az containerapp logs show --follow`) is enough to debug, at the cost of having no log history.
+
+Consequences: The first visitor after an hour of idle waits up to a minute with a visible "starting up" message; later requests are fast. With at most one replica there is no horizontal scaling, which is acceptable at this load and keeps the single-process assumptions (rate limits in the database, migrations guarded by sp_getapplock) simple.
