@@ -303,6 +303,7 @@ components:
         priority: { type: integer, minimum: 1, maximum: 5 }
         status: { type: string, enum: [not_started, in_progress, completed] }
         created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, description: Last change (migration 002) }
 
   requestBodies:
     Credentials:

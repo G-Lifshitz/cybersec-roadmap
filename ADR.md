@@ -111,3 +111,19 @@ Decision: Each service applies its own forward-only migrations (`migrations/NNN_
 Alternatives considered: Alembic, rejected because the models use plain SQL with no ORM, so it would add SQLAlchemy only to run migrations. Running migrations as a separate pipeline step, rejected because the GitHub runner would need the database password and a firewall opening to Azure SQL, while the app already has both.
 
 Consequences: Both databases start empty and evolve only through migration files that are never edited once applied; a fix is a new file. If progress is down when an item is deleted, the item's logs stay behind as orphans, which progress ignores because every report starts from the items roadmap returns.
+
+---
+
+## 9. Pipeline and testing: one workflow, CD gated on CI, cross-seam tested against a stub
+
+Date: 2026-11-20
+
+Status: Decided
+
+Context: Every push must be tested and every merge to main deployed with no manual steps, and only when CI passed on that same commit. Each service's tests need a real SQL Server, but CI must never touch Azure SQL. The cross-seam flow (progress asking roadmap about an item) needs an integration test.
+
+Decision: One GitHub Actions workflow (`pipeline.yml`) runs validate (system.yaml against the schema, both OpenAPI documents), lint plus tests with a 70% coverage gate per service against a SQL Server service container set up by the same `db/init.sql` as compose, and both Docker builds; the CD jobs (push SHA-tagged images to GHCR, deploy, upload the UI, health check) `need` those jobs and run only on pushes to main. The cross-seam integration test runs progress's real API and model logic against a stub of roadmap (`tests/test_api.py`), covering success, roadmap down, status sync failing, and degraded summary and stats.
+
+Alternatives considered: A separate CD workflow triggered by `workflow_run` after CI, rejected because it adds a second trigger whose commit has to be matched by hand, while `needs:` guarantees the same commit. Running the integration test against the full compose stack in CI, rejected for now because it doubles CI time and needs both images built and SQL Server started before a single assertion; the stub is the option §5 allows, and the compose stack is exercised by hand with `docker compose stop roadmap`.
+
+Consequences: A red test, a coverage drop below 70%, an invalid system.yaml or a broken image blocks the deploy. What is deliberately not tested automatically: the static UI's JavaScript (checked by hand), the real network between the two containers, and Azure-only behaviour (cold starts, the database resuming), which the post-deploy health check covers by waiting up to 6 minutes for both /health endpoints to report this commit's SHA.
