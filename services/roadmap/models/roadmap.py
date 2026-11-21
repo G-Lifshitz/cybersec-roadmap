@@ -12,7 +12,7 @@ from domain.tags import normalise_tags, split_tags
 EDITABLE_FIELDS = ("title", "type", "platform", "url", "skill_tags", "difficulty", "priority")
 STATUSES = ("not_started", "in_progress", "completed")
 
-_COLUMNS = "id, user_id, title, type, platform, url, skill_tags, difficulty, priority, status, created_at"
+_COLUMNS = "id, user_id, title, type, platform, url, skill_tags, difficulty, priority, status, created_at, updated_at"
 
 
 def get_all(user_id, status=None, skill=None, search=None, type_=None):
@@ -99,7 +99,7 @@ def update(item_id, user_id, **fields):
         changes["skill_tags"] = normalise_tags(changes["skill_tags"])
     # Column names come from EDITABLE_FIELDS (a fixed whitelist), never from
     # user input, so building the SET clause with an f-string is safe.
-    set_clause = ", ".join(f"{col} = %s" for col in changes)
+    set_clause = ", ".join(f"{col} = %s" for col in changes) + ", updated_at = SYSUTCDATETIME()"
     with transaction() as cur:
         cur.execute(f"UPDATE roadmap_items SET {set_clause} WHERE id = %s AND user_id = %s",
                     (*changes.values(), item_id, user_id))
@@ -111,7 +111,7 @@ def update_status(item_id, user_id, status):
     if status not in STATUSES:
         raise ValueError(f"unknown status {status!r}")
     with transaction() as cur:
-        cur.execute("UPDATE roadmap_items SET status = %s WHERE id = %s AND user_id = %s",
+        cur.execute("UPDATE roadmap_items SET status = %s, updated_at = SYSUTCDATETIME() WHERE id = %s AND user_id = %s",
                     (status, item_id, user_id))
         return cur.rowcount > 0
 

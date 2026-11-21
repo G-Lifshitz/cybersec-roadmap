@@ -229,3 +229,12 @@ def test_create_many_ignores_other_users_titles():
     bob = users.create_user("bob_b", "correct-horse")
     roadmap.create(bob, "First", "course", "Other", "", "", "beginner", 3)
     assert roadmap.create_many(UID, _rows("First")) == 1
+
+
+def test_updated_at_is_set_on_create_and_moves_on_change():
+    """Column added by migration 002."""
+    item_id = roadmap.create(UID, "PEH", "course", "TCM", "", "web", "beginner", 3)
+    created = roadmap.get_by_id(item_id, UID)
+    assert created["updated_at"] is not None
+    roadmap.update_status(item_id, UID, "in_progress")
+    assert roadmap.get_by_id(item_id, UID)["updated_at"] >= created["updated_at"]
