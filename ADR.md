@@ -143,3 +143,19 @@ Decision: Each Container App runs 0.25 vCPU and 0.5 GiB with minimum 0 and maxim
 Alternatives considered: Minimum 1 replica, rejected because an always-running container bills around the clock and breaks the scale-to-zero rule. Azure Container Registry, rejected because it has a fixed monthly cost while GHCR is free for this repository. A Log Analytics workspace, rejected because it is a separate resource billed per GB; the live stream (`az containerapp logs show --follow`) is enough to debug, at the cost of having no log history.
 
 Consequences: The first visitor after an hour of idle waits up to a minute with a visible "starting up" message; later requests are fast. With at most one replica there is no horizontal scaling, which is acceptable at this load and keeps the single-process assumptions (rate limits in the database, migrations guarded by sp_getapplock) simple.
+
+---
+
+## 10. Deliberately not built: a message broker for clean-up across the seam
+
+Date: 2026-11-25
+
+Status: Decided
+
+Context: Before the split, deleting a roadmap item or an account removed the matching progress logs through ON DELETE CASCADE. Now roadmap asks progress to delete them over HTTP (`DELETE /items/{item_id}/logs`, `DELETE /logs`). If progress is down at that moment, the call fails, and there is nothing that retries it later.
+
+Decision: No message broker and no background worker; both are out of scope in §1c. Deleting an item stays best effort: the item is deleted and its logs remain as orphans, which progress never shows because every report starts from the items roadmap returns (ADR 7). Deleting an account is the one case where orphans are not acceptable, so it is refused with 503 until progress confirms the logs are gone, and the user retries.
+
+Alternatives considered: Azure Service Bus (or RabbitMQ) with an "item deleted" / "user deleted" event that progress consumes, so the clean-up happens when progress comes back. Rejected because it is a third component with its own cost, a consumer that has to stay running (which breaks scale to zero) and a new failure mode, all to remove rows that are already invisible. An outbox table in the roadmap database plus a retry job was rejected for the same reason: it needs a background job runner.
+
+Consequences: Orphaned logs can build up in progress_db after item deletions while progress was unavailable; they take space but leak nothing, since the only user who can read them is their owner and the UI never lists them. A broker becomes worth building when more than one consumer needs the same event (for example notifications or analytics), when orphans must not exist for compliance, or at around 100x traffic, when synchronous calls across the seam on every delete add noticeable latency and the outages they depend on become frequent.
