@@ -1,0 +1,23 @@
+digraph G { rankdir=TB; graph [fontname="Helvetica", fontsize=11, nodesep=0.5, ranksep=0.6, pad=0.3]; node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#F4F6F8", color="#5B6770"]; edge [fontname="Helvetica", fontsize=10, color="#5B6770"]; 
+label="Deployment: GitHub → Actions → GHCR → Azure (rg-glifshitz-ieu2024, Germany West Central)"; labelloc=t; fontsize=13;
+gh [label="GitHub repo\nG-Lifshitz/cybersec-roadmap\n(PR → merge to main)", fillcolor="#FFFFFF"];
+subgraph cluster_ga { label="GitHub Actions: pipeline.yml"; style=rounded;
+  ci [label="CI (every push / PR)\nvalidate system.yaml + OpenAPI\nruff + pytest ≥70% (SQL Server container)\ndocker build ×2"];
+  cd [label="CD (push to main, needs CI)\npublish images\ndeploy + upload UI\n/health must report the SHA"];
+  ci -> cd [label="needs:"]; }
+ghcr [label="GHCR\nghcr.io/g-lifshitz/cybersec-roadmap-roadmap:<sha>\nghcr.io/g-lifshitz/cybersec-roadmap-progress:<sha>", fillcolor="#FFFFFF"];
+id [label="Managed identity\nglifshitz-ieu2024-github\n(OIDC, Contributor on RG)", fillcolor="#FFF8E1"];
+subgraph cluster_az { label="Azure: rg-glifshitz-ieu2024"; style=rounded; color="#0078D4";
+  subgraph cluster_env { label="Container Apps env glifshitz-ieu2024-env (Consumption, 0–1 replica)"; style=rounded;
+    car [label="glifshitz-ieu2024-roadmap"]; cap [label="glifshitz-ieu2024-progress"]; }
+  subgraph cluster_sql { label="SQL server glifshitz-ieu2024-sql (serverless, free offer, auto-pause)"; style=rounded;
+    rdb [label="glifshitz-ieu2024-roadmap-db", shape=cylinder, fillcolor="#E8F0FE"];
+    pdb [label="glifshitz-ieu2024-progress-db", shape=cylinder, fillcolor="#E8F0FE"]; }
+  st [label="Storage glifshitzieu2024ui\nstatic website ($web)\nindex.html, js/, config.js", fillcolor="#E8F5E9"];
+  car -> rdb; cap -> pdb; }
+user [label="User browser\nhttps://glifshitzieu2024ui.z1.web.core.windows.net", fillcolor="#FFFFFF"];
+gh -> ci; cd -> ghcr [label="docker push"]; cd -> id [label="azure/login (OIDC)", style=dashed];
+cd -> car [label="containerapp update --image"]; cd -> cap; cd -> st [label="upload-batch"];
+ghcr -> car [style=dotted, label="pull"]; ghcr -> cap [style=dotted];
+user -> st; user -> car [label="HTTPS", constraint=false]; user -> cap [constraint=false];
+}

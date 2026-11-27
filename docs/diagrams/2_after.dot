@@ -1,0 +1,17 @@
+digraph G { rankdir=TB; graph [fontname="Helvetica", fontsize=11, nodesep=0.5, ranksep=0.6, pad=0.3]; node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#F4F6F8", color="#5B6770"]; edge [fontname="Helvetica", fontsize=10, color="#5B6770"]; 
+label="After (Assignment 2): two services, a database each, static UI"; labelloc=t; fontsize=13;
+browser [label="Browser\nstatic UI (HTML + JS modules)\nbearer token in sessionStorage", fillcolor="#FFFFFF"];
+subgraph cluster_r { label="roadmap service (Flask + gunicorn)"; style=rounded;
+  r [label="users + login (issues tokens)\nroadmap items, assessments,\ntimelines"]; }
+subgraph cluster_p { label="progress service (Flask + gunicorn)"; style=rounded;
+  p [label="progress logs\nsummary, stats"]; }
+rdb [label="roadmap_db\n(login roadmap_svc)", shape=cylinder, fillcolor="#E8F0FE"];
+pdb [label="progress_db\n(login progress_svc)", shape=cylinder, fillcolor="#E8F0FE"];
+browser -> r [label="HTTPS JSON\n(CORS: UI origin only)"];
+browser -> p [label="HTTPS JSON"];
+p -> r [label="GET /items/{item_id}\nPATCH /items/{item_id}/status\nGET /items   (2 s timeout)\ndown → log refused 503,\nsummary/stats degraded", color="#C0392B", fontcolor="#C0392B", penwidth=1.6];
+r -> p [label="DELETE /items/{item_id}/logs (best effort)\nDELETE /logs (required, else 503)", color="#C0392B", fontcolor="#C0392B", penwidth=1.6, constraint=false];
+r -> rdb; p -> pdb;
+seam [label="THE SEAM: no cross-database access,\nonly HTTP; item_id in progress_logs is a plain ID", shape=note, fillcolor="#FDEDEC", color="#C0392B"];
+{rank=same; r; p;}
+}

@@ -1,0 +1,14 @@
+digraph G { rankdir=TB; graph [fontname="Helvetica", fontsize=11, nodesep=0.5, ranksep=0.6, pad=0.3]; node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#F4F6F8", color="#5B6770"]; edge [fontname="Helvetica", fontsize=10, color="#5B6770"]; 
+label="Before (Assignment 1): one Flask process, one SQLite file"; labelloc=t; fontsize=13;
+browser [label="Browser", fillcolor="#FFFFFF"];
+subgraph cluster_app { label="Flask monolith (app.py, one process)"; style="rounded"; color="#5B6770";
+  routes [label="Routes + Jinja2 templates\n(server-rendered HTML, session cookie)"];
+  rm [label="Roadmap domain\nusers, roadmap_items,\nassessments"];
+  pm [label="Progress domain\nprogress_logs, stats"];
+  routes -> rm; routes -> pm; pm -> rm [label="JOIN on roadmap_items\n(in-process)", style=dashed];
+}
+db [label="SQLite file (DATA_DIR)\nprogress_logs.item_id → roadmap_items.id\nFOREIGN KEY ON DELETE CASCADE", shape=cylinder, fillcolor="#E8F0FE"];
+ext [label="GitHub API / YouTube API", fillcolor="#FFFFFF"];
+browser -> routes [label="HTTP, HTML pages"];
+rm -> db; pm -> db; routes -> ext [style=dotted];
+}
