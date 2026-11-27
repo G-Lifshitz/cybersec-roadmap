@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>cyberroadmap: Assignment 2 report</title><style>
+@page { size: A4; margin: 14mm 16mm 15mm; }
+:root { --text:#1d1b26; --muted:#5f574e; --line:#d2c6b5; --soft:#f4efe7; --accent:#5b5046; }
+* { box-sizing: border-box; }
+body { font: 10.2pt/1.4 Carlito, "Liberation Sans", sans-serif; color: var(--text); margin: 0; }
+h1, h2, h3 { font-family: Caladea, "Liberation Serif", serif; font-weight: 700; margin: 0; }
+h1 { font-size: 21pt; letter-spacing: -0.01em; }
+h2 { font-size: 13.5pt; margin: 13pt 0 5pt; padding-bottom: 3pt; border-bottom: 1px solid var(--line); break-after: avoid; }
+h3 { font-size: 10.8pt; margin: 8pt 0 3pt; break-after: avoid; }
+p { margin: 0 0 5.5pt; } ul { margin: 0 0 6pt; padding-left: 15pt; } li { margin-bottom: 2pt; }
+.meta { color: var(--muted); margin: 3pt 0 2pt; } .meta a { color: var(--muted); }
+header { border-bottom: 2px solid var(--accent); padding-bottom: 7pt; margin-bottom: 4pt; }
+a { color: var(--accent); }
+code { font: 8.8pt "DejaVu Sans Mono", monospace; background: var(--soft); padding: 0 2pt; border-radius: 2pt; }
+pre { font: 8.3pt/1.35 "DejaVu Sans Mono", monospace; background: var(--soft); padding: 5pt 7pt; margin: 3pt 0 7pt; white-space: pre-wrap; break-inside: avoid; }
+table { width: 100%; border-collapse: collapse; font-size: 8.9pt; margin: 3pt 0 8pt; break-inside: avoid; }
+th { text-align: left; font-weight: 700; border-bottom: 1.2px solid var(--accent); padding: 3pt 5pt; }
+td { border-bottom: 1px solid var(--line); padding: 3pt 5pt; vertical-align: top; }
+figure { margin: 5pt 0 8pt; break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; height: auto; }
+figcaption { font-size: 8.7pt; color: var(--muted); margin-top: 3pt; text-align: left; }
+.two { display: flex; gap: 10pt; align-items: flex-start; } .two figure { flex: 1; }
+.disclosure { break-inside: avoid; background: var(--soft); border-left: 3px solid var(--accent); padding: 7pt 10pt; margin: 4pt 0 6pt; }
+</style></head><body>
+<header>
+  <h1>cyberroadmap: split, shipped and operated</h1>
+  <p class="meta">DevOps Individual Assignment 2: project report · Georgy Lifshitz · IE University, BCSAI · November 2026</p>
+  <p class="meta">Live: <a href="https://glifshitzieu2024ui.z1.web.core.windows.net">glifshitzieu2024ui.z1.web.core.windows.net</a> · Repository: <a href="https://github.com/G-Lifshitz/cybersec-roadmap">github.com/G-Lifshitz/cybersec-roadmap</a> · <code>README.md</code> · <code>ADR.md</code> (6-10) · <code>AI_USAGE.md</code> · <code>system.yaml</code></p>
+</header>
+
+<h2>1. What changed</h2>
+<p>The Assignment 1 monolith (one Flask process, Jinja2 pages, one SQLite file) is now two Flask services, each in its own container with its own serverless SQL database, plus a static UI. No features were added; the work was moving the seam from inside one process to the network, and then building, testing and deploying the result automatically. The split follows ADR 2 unchanged: <b>roadmap</b> owns accounts, roadmap items, assessments and timelines; <b>progress</b> owns only the progress logs and the summary and statistics built from them (ADR 6).</p>
+
+<h2>2. Architecture, before and after</h2>
+<div class="two">
+<figure><img src="diagrams/1_before.png" style="max-height:70mm"><figcaption><b>Figure 1.</b> Assignment 1: routes, templates and both domains in one process; progress reached roadmap data with an in-process JOIN and a cascading foreign key in the same SQLite file.</figcaption></figure>
+<figure><img src="diagrams/2_after.png" style="max-height:70mm"><figcaption><b>Figure 2.</b> Assignment 2: the browser calls both services directly; the services talk to each other only over HTTP (red), each with its own database and login.</figcaption></figure>
+</div>
+<h3>What crosses the seam</h3>
+<p>The browser calls both services; the token roadmap issues at login (signed with a secret both services share, ADR 6) is forwarded on every call between them, so each service only ever acts for the user who made the request. Every outbound call has a 2 s timeout.</p>
+<table>
+<tr><th>Call</th><th>Why</th><th>If the other service is down</th></tr>
+<tr><td><code>progress → GET /items/{item_id}</code>, <code>PATCH /items/{item_id}/status</code></td><td>Before saving a log, check the item exists and belongs to the user, then move its status (the user-visible flow that crosses the seam server side).</td><td>Log refused with 503 <code>roadmap_unavailable</code>; nothing is saved.</td></tr>
+<tr><td><code>progress → GET /items</code></td><td>Skill tags for the summary and statistics (the old JOIN).</td><td>Degraded: everything progress owns is returned, tag-based parts are left out, <code>roadmap_available: false</code>.</td></tr>
+<tr><td><code>roadmap → DELETE /items/{item_id}/logs</code></td><td>Replaces <code>ON DELETE CASCADE</code> when an item is deleted.</td><td>Best effort: item deleted, orphan logs stay and are never shown (ADR 7, ADR 10).</td></tr>
+<tr><td><code>roadmap → DELETE /logs</code></td><td>Account deletion must remove the user's logs too.</td><td>Account kept, 503; the user retries.</td></tr>
+</table>
+<h3>Partial-failure evidence</h3>
+<p>With <code>docker compose stop roadmap</code>, the progress pages still list the user's logs, the summary loads without its tag breakdown, and logging new progress shows the designed message instead of a stack trace or a hang. The response behind it:</p>
+<pre>POST /logs  →  503 Service Unavailable   Retry-After: 30
+{"error": "roadmap_unavailable",
+ "message": "Your roadmap can't be reached right now, so progress wasn't saved. Try again shortly."}</pre>
+<figure><img src="diagrams/partial_failure.png" style="max-height:58mm"><figcaption><b>Figure 6.</b> Local stack with <code>docker compose stop roadmap</code>: the page was opened before roadmap was stopped; the user stays logged in (progress verifies the token itself), saving a 65% log shows the designed message, and the history still shows only the earlier 50% entry, so nothing was saved.</figcaption></figure>
+
+<h2>3. Deployment</h2>
+<figure><img src="diagrams/3_deploy.png" style="max-height:88mm"><figcaption><b>Figure 3.</b> GitHub → Actions → GHCR → Azure. Everything lives in <code>rg-glifshitz-ieu2024</code> (Germany West Central), created once by <code>infra/azure-setup.sh</code> and changed afterwards only by the pipeline.</figcaption></figure>
+<p><b>Resources and cost model.</b> Two Container Apps (<code>glifshitz-ieu2024-roadmap</code>, <code>-progress</code>) in one Consumption environment, 0.25 vCPU / 0.5 GiB, 0 to 1 replicas, billed per second only while a replica runs. Two serverless databases on one logical server (<code>glifshitz-ieu2024-sql</code>) on the free offer, which pause after 60 minutes idle. The storage account <code>glifshitzieu2024ui</code> serves the static site and is billed per GB stored and transferred (pennies). Images are on GHCR, which is free. The managed identity <code>glifshitz-ieu2024-github</code> has Contributor on the resource group only and is trusted through OIDC for runs on <code>main</code>, so no Azure password exists anywhere. Database URLs and the token secret are GitHub secrets passed to Container Apps as secrets. Idle cost is effectively zero (ADR 8).</p>
+<p><b>Scale to zero and cold starts.</b> After an hour idle, the first request starts a container and finds the database paused; resuming takes up to a minute, during which connections fail with error 40613 (which I hit myself while querying the paused database). Each layer absorbs this instead of avoiding it: the migration runner waits up to 180 s for the database before gunicorn starts; each request retries its connection with backoff for up to 90 s and otherwise answers 503 <code>starting_up</code> with Retry-After; the UI retries GETs for up to 90 s behind a "starting up" banner; the CD health check waits up to 6 minutes. Maximum one replica means migrations at startup can never run twice at once (an <code>sp_getapplock</code> guards them anyway). <b>At 100x traffic</b> I would raise the replica maximum (moving rate limits and migrations off the request path: migrations as a pipeline step before the new revision), set minimum replicas to 1 to remove cold starts at a fixed cost, leave the serverless free offer for a provisioned tier with connection pooling, and put a cache or a message broker in front of the cross-seam calls (ADR 10).</p>
+
+<h2>4. Data and migrations</h2>
+<figure><img src="diagrams/4_db.png" style="max-height:84mm"><figcaption><b>Figure 4.</b> One database per service, as created by the migrations. <code>progress_logs.item_id</code> and <code>user_id</code> are plain IDs: the foreign key to <code>roadmap_items</code> could not cross databases, so integrity is checked over HTTP on insert and compensated on delete. <code>updated_at</code> (highlighted) was added by migration 002.</figcaption></figure>
+<p>The schema is defined by numbered files in each service's <code>migrations/</code> folder. A small runner (<code>migrate.py</code>) applies the ones not yet recorded in <code>schema_migrations</code>, in order, each in one transaction, at container start before gunicorn; a second start applies nothing. Each service connects with its own login (<code>roadmap_svc</code>, <code>progress_svc</code>) that has no access to the other database. Migrations are forward-only; applied files are never edited, and the recovery plan is in ADR 7: a failing migration rolls back in its transaction and the container does not start, so the deploy fails with the old schema intact and the fix is a new migration; data damaged by a migration that succeeded is recovered with Azure SQL's point-in-time restore.</p>
+<h3>Migration evidence on Azure</h3>
+<p><code>002_items_updated_at.sql</code> changes a table that already held data without recreating it: add <code>updated_at</code> as nullable, backfill it from <code>created_at</code>, then make it <code>NOT NULL</code> with a default. It was deployed by <a href="https://github.com/G-Lifshitz/cybersec-roadmap/actions/runs/44929227558">CI/CD run #7</a> (merge of PR #2, 21 November). I queried <code>glifshitz-ieu2024-roadmap-db</code> with <code>sqlcmd</code> before and after, through a temporary firewall rule that was removed afterwards:</p>
+<table>
+<tr><th></th><th><code>schema_migrations</code></th><th><code>roadmap_items</code></th></tr>
+<tr><td>Before the deploy</td><td><code>001_init.sql</code> only</td><td>1 row: id 1 "pen test", <code>in_progress</code>, created 2026-11-20 10:27:31; no <code>updated_at</code> column</td></tr>
+<tr><td>After the deploy</td><td><code>001_init.sql</code>, <code>002_items_updated_at.sql</code> (applied 2026-11-21 17:19:48 UTC)</td><td>The same row, unchanged, with <code>updated_at</code> = 2026-11-20 10:27:31 (backfilled)</td></tr>
+</table>
+<p>At startup the runner logs one line per file it applies (<code>migration applied: 002_items_updated_at.sql</code>) and then <code>migrations up to date (N applied on this start)</code>. <!--LOGLINE--></p>
+<figure><img src="diagrams/migration_evidence.png" style="max-height:52mm"><figcaption><b>Figure 5.</b> Cloud Shell, 21 November: the same queries before the deploy (top: only 001, no <code>updated_at</code>) and after it (bottom: 002 recorded, same row, <code>updated_at</code> backfilled).</figcaption></figure>
+
+<h2>5. Pipeline and testing</h2>
+<p>One workflow, <code>.github/workflows/pipeline.yml</code> (ADR 9). On every push and pull request, CI <b>validates</b> <code>system.yaml</code> against the course's <code>system.schema.json</code> and both <code>openapi.yaml</code> files against the OpenAPI specification, then per service runs <b>ruff</b> and <b>pytest</b> against a SQL Server service container set up by the same <code>db/init.sql</code> as compose, failing below <b>70% coverage</b>, and <b>builds</b> both images. On a push to <code>main</code> only, the CD jobs <code>need</code> all of those, so nothing is deployed from a commit that failed CI: they push images tagged with the commit SHA to GHCR, deploy them, write <code>config.js</code> with the two service URLs and upload <code>ui/</code> to <code>$web</code>, and fail unless both <code>/health</code> endpoints return 200 with that SHA as <code>version</code>. CI never touches Azure SQL.</p>
+<p><b>Cross-seam test.</b> <code>services/progress/tests/test_api.py</code> runs progress's real API and models against a stub of roadmap: success, roadmap down (503, nothing saved), the status update failing, and the degraded summary and statistics. A stub instead of the compose stack keeps CI fast and makes "roadmap is down" a deterministic test case; the real network is exercised by hand with <code>docker compose stop</code>. Deliberately not tested automatically: the UI's JavaScript, the network between the containers, and Azure-only behaviour, which the post-deploy health check covers.</p>
+<p><b>Observability.</b> <code>GET /health</code> on each service writes and reads its own <code>health_check</code> row and returns <code>{"status":"ok","db":"ok","version":"&lt;sha&gt;"}</code>, or 503 if its own database is unreachable (never because of the other service). Each request logs one line to stdout: method, path, status and duration.</p>
+<h3>Pipeline evidence</h3>
+<ul>
+<li>Successful CD runs on <code>main</code>: <a href="https://github.com/G-Lifshitz/cybersec-roadmap/actions/runs/44929227558">#7</a> (deployed migration 002) and <a href="https://github.com/G-Lifshitz/cybersec-roadmap/actions/runs/45591727743">#18</a> (latest at the time of writing).</li>
+<li><!--FAILED_RUN-->Failed run that was fixed: none of the 21 runs so far has failed. The failures this project had were caught before pushing, by running the same commands locally: a logging test broke because <code>logging.basicConfig(force=True)</code> replaced pytest's capture handler, and the first Dockerfiles used <code>COPY . .</code> and the compose file was named <code>compose.yaml</code>, both against the brief, which was fixed in <code>d7f134a</code> before CI saw them. I did not stage a failure to produce a red run.</li>
+</ul>
+
+<h2>6. README</h2>
+<p><code>README.md</code> covers running the whole system with <code>docker compose up --build</code> from a clean clone (UI on 8080, roadmap 8001, progress 8002), running one service on its own, running lint, tests and coverage per service, how deployment works, every command of the initial Azure setup (<code>infra/azure-setup.sh</code>, idempotent), how the migration evidence was collected, and the live URL. It also notes that the system runs on my personal Azure for Students subscription because the one on my IE account expired and could not be renewed.</p>
+
+<h2>7. AI disclosure</h2>
+<div class="disclosure">I acknowledge the use of Claude (Anthropic) to help design, write, test, deploy and document this assignment. Prompts included requests to split the monolith along the ADR 2 seam, port both data layers to SQL Server with a migration runner, turn the services into JSON APIs and rebuild the pages as a static UI, write the Dockerfiles, the compose file, the Azure setup script and the CI/CD workflow, write <code>system.yaml</code> and the OpenAPI documents, write migration 002, draft ADRs 6 to 10, the README, the diagrams and this report, and walk me through collecting the evidence on Azure. The output was used as a starting point for each change: I ran the stack and the tests on my own machine, did the Azure setup and every push myself, reviewed and corrected what I found wrong while testing, and decided what to keep. Every interaction is listed with its commit in <code>AI_USAGE.md</code>, including an explanation in my own words of each infrastructure file.</div>
+</body></html>
